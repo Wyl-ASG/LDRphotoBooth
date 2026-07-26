@@ -1,122 +1,419 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Camera, Users, Save, Loader2, Sparkles, Copy, Heart, RefreshCcw, XCircle, Star } from 'lucide-react';
 
-function App() {
-  const [count, setCount] = useState(0)
+import { loadScript } from './utils/loadScript';
+import { useGoogleAuth } from './hooks/useGoogleAuth';
+import { useWebRTC } from './hooks/useWebRTC';
+import { Button } from './components/Button';
+import { BoothCamera } from './components/BoothCamera';
+import { BoothDecorate } from './components/BoothDecorate';
+import { BoothGallery } from './components/BoothGallery';
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+export default function App() {
+  const [appState, setAppState] = useState('LANDING'); 
+  const [errorMsg, setErrorMsg] = useState('');
+  const [joinIdInput, setJoinIdInput] = useState('');
+  
+  // Photo & Purikura State
+  const [photos, setPhotos] = useState([]);
+  const [countdown, setCountdown] = useState(null);
+  const [flash, setFlash] = useState(false);
+  const [layoutStyle, setLayoutStyle] = useState('split-horizontal');
+  const [cameraFilter, setCameraFilter] = useState('none');
+  
+  // Decoration State
+  const [rawPhoto, setRawPhoto] = useState(null); 
+  const [stickers, setStickers] = useState([]);
+
+  // Upload State
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const animationFrameRef = useRef(null);
+
+  useEffect(() => {
+    const init = async () => {
+      try {
+        await Promise.all([
+          loadScript('https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js', 'peerjs-script'),
+          loadScript('https://accounts.google.com/gsi/client', 'google-gis-script')
+        ]);
+      } catch (err) {
+        setErrorMsg("Failed to load libraries.");
+      }
+    };
+    init();
+  }, []);
+
+  const { 
+    role, peerId, localStream, remoteStream, 
+    startHostSession, startGuestSession, sendData, cleanupWebRTC 
+  } = useWebRTC(setErrorMsg, (data) => {
+    if (data.type === 'COUNTDOWN_TICK') setCountdown(data.count); 
+    else if (data.type === 'PHOTO_TAKEN') {
+      triggerFlash();
+      setRawPhoto(data.photoUrl);
+      setStickers([]); 
+      setAppState('DECORATE');
+    }
+    else if (data.type === 'BACK_TO_BOOTH') setAppState('BOOTH');
+    else if (data.type === 'LAYOUT_CHANGE') setLayoutStyle(data.layoutStyle);
+    else if (data.type === 'FILTER_CHANGE') setCameraFilter(data.cameraFilter);
+    else if (data.type === 'SYNC_STICKERS') setStickers(data.stickers);
+    else if (data.type === 'FINISH_DECORATING') {
+      setPhotos(prev => [...prev, data.finalPhotoUrl]);
+      setAppState('GALLERY');
+    }
+  });
+
+  const { googleToken, handleGoogleLogin } = useGoogleAuth(
+    GOOGLE_CLIENT_ID, 
+    setErrorMsg, 
+    () => {
+      setAppState('HOST_WAITING');
+      startHostSession(() => setAppState('BOOTH'));
+    }
+  );
+
+  useEffect(() => {
+    return () => {
+      cleanupWebRTC();
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    };
+  }, [cleanupWebRTC]);
+
+  useEffect(() => {
+    if (localVideoRef.current && localStream) localVideoRef.current.srcObject = localStream;
+    if (remoteVideoRef.current && remoteStream) remoteVideoRef.current.srcObject = remoteStream;
+  }, [localStream, remoteStream]);
+
+  // --- BOOTH LOGIC ---
+  const triggerSyncCountdown = () => {
+    let count = 3;
+    setCountdown(count);
+    sendData({ type: 'COUNTDOWN_TICK', count });
+
+    const interval = setInterval(() => {
+      count -= 1;
+      setCountdown(count > 0 ? count : null);
+      sendData({ type: 'COUNTDOWN_TICK', count: count > 0 ? count : null });
+      
+      if (count === 0) {
+        clearInterval(interval);
+        setTimeout(() => takePhotoAndDecorate(), 50);
+      }
+    }, 1000);
+  };
+
+  const triggerFlash = () => {
+    setFlash(true);
+    setTimeout(() => setFlash(false), 200);
+  };
+
+  const takePhotoAndDecorate = () => {
+    if (!canvasRef.current) return;
+    triggerFlash();
+    const photoUrl = canvasRef.current.toDataURL('image/jpeg', 0.9);
+    
+    setRawPhoto(photoUrl);
+    setStickers([]); 
+    setAppState('DECORATE');
+    
+    sendData({ type: 'PHOTO_TAKEN', photoUrl });
+  };
+
+  const compositeCanvas = useCallback(() => {
+    if (appState !== 'BOOTH' || !canvasRef.current) return;
+    const ctx = canvasRef.current.getContext('2d');
+    const w = canvasRef.current.width;
+    const h = canvasRef.current.height;
+
+    ctx.fillStyle = '#fff0f5'; // Lavender blush
+    ctx.fillRect(0, 0, w, h);
+
+    if (cameraFilter === 'kawaii') {
+      ctx.filter = 'brightness(1.15) saturate(1.3) contrast(1.05) sepia(0.2) hue-rotate(-5deg)';
+    } else if (cameraFilter === 'vintage') {
+      ctx.filter = 'sepia(0.7) contrast(1.1) brightness(0.9)';
+    } else if (cameraFilter === 'bnw') {
+      ctx.filter = 'grayscale(1) contrast(1.2)';
+    } else {
+      ctx.filter = 'none';
+    }
+
+    const drawVideo = (videoElem, x, y, width, height) => {
+      if (videoElem && videoElem.readyState >= 2) {
+        const vidRatio = videoElem.videoWidth / videoElem.videoHeight;
+        const targetRatio = width / height;
+        let sWidth = videoElem.videoWidth, sHeight = videoElem.videoHeight, sx = 0, sy = 0;
+
+        if (vidRatio > targetRatio) {
+          sWidth = sHeight * targetRatio;
+          sx = (videoElem.videoWidth - sWidth) / 2;
+        } else {
+          sHeight = sWidth / targetRatio;
+          sy = (videoElem.videoHeight - sHeight) / 2;
+        }
+        ctx.save();
+        ctx.translate(x + width, y);
+        ctx.scale(-1, 1);
+        
+        // Draw rounded rect mask for videos
+        ctx.beginPath();
+        ctx.roundRect(0, 0, width, height, [20]); 
+        ctx.clip();
+        
+        ctx.drawImage(videoElem, sx, sy, sWidth, sHeight, 0, 0, width, height);
+        ctx.restore();
+      }
+    };
+
+    const pad = 24;
+
+    if (layoutStyle === 'split-horizontal') {
+      const halfW = (w / 2) - (pad * 1.5);
+      const drawH = h - (pad * 2);
+      drawVideo(role === 'host' ? localVideoRef.current : remoteVideoRef.current, pad, pad, halfW, drawH);
+      drawVideo(role === 'guest' ? localVideoRef.current : remoteVideoRef.current, w / 2 + (pad / 2), pad, halfW, drawH);
+
+      ctx.filter = 'none'; 
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 16;
+      ctx.beginPath(); ctx.roundRect(pad, pad, halfW, drawH, [20]); ctx.stroke();
+      ctx.beginPath(); ctx.roundRect(w / 2 + (pad / 2), pad, halfW, drawH, [20]); ctx.stroke();
+    } 
+    else if (layoutStyle === 'split-vertical') {
+      const drawW = w - (pad * 2);
+      const halfH = (h / 2) - (pad * 1.5);
+      drawVideo(role === 'host' ? localVideoRef.current : remoteVideoRef.current, pad, pad, drawW, halfH);
+      drawVideo(role === 'guest' ? localVideoRef.current : remoteVideoRef.current, pad, h / 2 + (pad / 2), drawW, halfH);
+
+      ctx.filter = 'none';
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 16;
+      ctx.beginPath(); ctx.roundRect(pad, pad, drawW, halfH, [20]); ctx.stroke();
+      ctx.beginPath(); ctx.roundRect(pad, h / 2 + (pad / 2), drawW, halfH, [20]); ctx.stroke();
+    }
+    else if (layoutStyle === 'pip') {
+      const drawW = w - (pad * 2);
+      const drawH = h - (pad * 2);
+      const pipW = drawW / 3.5;
+      const pipH = drawH / 3.5;
+      
+      drawVideo(role === 'host' ? localVideoRef.current : remoteVideoRef.current, pad, pad, drawW, drawH);
+      drawVideo(role === 'guest' ? localVideoRef.current : remoteVideoRef.current, w - pipW - (pad * 2), h - pipH - (pad * 2), pipW, pipH);
+
+      ctx.filter = 'none';
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 16;
+      ctx.beginPath(); ctx.roundRect(pad, pad, drawW, drawH, [20]); ctx.stroke();
+      
+      ctx.lineWidth = 8;
+      ctx.beginPath(); ctx.roundRect(w - pipW - (pad * 2), h - pipH - (pad * 2), pipW, pipH, [16]); ctx.stroke();
+    }
+    
+    // Purikura Branding Watermark
+    ctx.fillStyle = '#ff69b4'; 
+    ctx.font = '900 36px "M PLUS Rounded 1c", sans-serif'; 
+    ctx.textAlign = 'center';
+    
+    // Text outline
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'white';
+    ctx.strokeText('✨ PURI-PURI BOOTH ✨', w / 2, h - 30);
+    ctx.fillText('✨ PURI-PURI BOOTH ✨', w / 2, h - 30);
+
+    animationFrameRef.current = requestAnimationFrame(compositeCanvas);
+  }, [appState, role, layoutStyle, cameraFilter]);
+
+  useEffect(() => {
+    if (appState === 'BOOTH') setTimeout(() => compositeCanvas(), 100);
+    return () => cancelAnimationFrame(animationFrameRef.current);
+  }, [appState, compositeCanvas]);
+
+  const handleAddSticker = (emoji) => {
+    const newStickers = [...stickers, { id: Date.now(), emoji, x: 640, y: 480, size: 120 }];
+    setStickers(newStickers);
+    sendData({ type: 'SYNC_STICKERS', stickers: newStickers });
+  };
+
+  const handleUpdateSticker = (id, newProps) => {
+    const newStickers = stickers.map(s => s.id === id ? { ...s, ...newProps } : s);
+    setStickers(newStickers);
+    sendData({ type: 'SYNC_STICKERS', stickers: newStickers });
+  };
+
+  const handleFinishDecorating = (finalPhotoUrl) => {
+    setPhotos(prev => [...prev, finalPhotoUrl]);
+    setAppState('GALLERY');
+    sendData({ type: 'FINISH_DECORATING', finalPhotoUrl });
+  };
+
+  const saveToGoogleDrive = async () => {
+    if (!googleToken || photos.length === 0) return;
+    setIsUploading(true);
+    setUploadSuccess(false);
+
+    try {
+      const boundary = '-------314159265358979323846';
+      const delimiter = "\r\n--" + boundary + "\r\n";
+      const close_delim = "\r\n--" + boundary + "--";
+      
+      const metadata = { name: `Purikura_${Date.now()}.jpg`, mimeType: 'image/jpeg' };
+      const base64Data = photos[photos.length - 1].split(',')[1];
+
+      const body = delimiter +
+        'Content-Type: application/json\r\n\r\n' + JSON.stringify(metadata) + delimiter +
+        'Content-Type: image/jpeg\r\nContent-Transfer-Encoding: base64\r\n\r\n' + base64Data + close_delim;
+
+      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${googleToken}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
+        body
+      });
+
+      if (!res.ok) throw new Error('Upload failed');
+      setUploadSuccess(true);
+      setTimeout(() => setUploadSuccess(false), 3000);
+    } catch (err) {
+      setErrorMsg(`Upload failed: ${err.message}`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleGuestJoin = async () => {
+    setAppState('GUEST_JOIN');
+    const success = await startGuestSession(joinIdInput, () => setAppState('BOOTH'));
+    if (!success) setAppState('ROLE_SELECT');
+  };
+
+  const handleBackToBooth = () => {
+    setAppState('BOOTH');
+    sendData({ type: 'BACK_TO_BOOTH' });
+  };
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="min-h-screen relative flex flex-col items-center justify-center p-4 overflow-hidden">
+      <video ref={localVideoRef} autoPlay playsInline muted className="hidden" />
+      <video ref={remoteVideoRef} autoPlay playsInline className="hidden" />
 
-      <div className="ticks"></div>
+      {/* Floating Background Decorations */}
+      <div className="absolute top-10 left-10 text-6xl text-pink-300 opacity-50 animate-float"><Star fill="currentColor" size={64}/></div>
+      <div className="absolute bottom-20 right-10 text-6xl text-cyan-300 opacity-50 animate-float" style={{animationDelay: '1s'}}><Star fill="currentColor" size={48}/></div>
+      <div className="absolute top-20 right-20 text-4xl animate-spin-slow opacity-60">✨</div>
+      <div className="absolute bottom-10 left-20 text-5xl animate-spin-slow opacity-60" style={{animationDirection: 'reverse'}}>🌸</div>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+      {/* Main Arcade Frame */}
+      <div className="w-full max-w-5xl glass-panel rounded-[3rem] shadow-[12px_12px_0px_rgba(255,105,180,0.3)] border-8 border-white flex flex-col min-h-[700px] relative z-10">
+        
+        {/* Header Ribbon */}
+        <div className="bg-pink-400 p-6 flex justify-center text-white relative rounded-t-[2.5rem] border-b-8 border-pink-500">
+          <Heart className="absolute left-8 animate-pulse hidden sm:block text-pink-200" fill="currentColor" size={32} />
+          <h1 className="text-4xl brand-font tracking-wider flex items-center gap-3 drop-shadow-md">
+            <Sparkles className="animate-spin-slow" /> PURI-PURI BOOTH <Sparkles className="animate-spin-slow" />
+          </h1>
+          <Heart className="absolute right-8 animate-pulse hidden sm:block text-pink-200" fill="currentColor" size={32} />
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+        {errorMsg && (
+          <div className="bg-red-100 border-l-8 border-red-500 p-4 m-6 rounded-r-xl flex items-center gap-3 shadow-md">
+             <XCircle className="text-red-500 shrink-0" size={28} />
+             <p className="text-red-700 font-bold text-lg">{errorMsg}</p>
+          </div>
+        )}
+
+        {/* Content Area */}
+        <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-10">
+          
+          {appState === 'LANDING' && (
+            <div className="text-center space-y-10 animate-float">
+              <div className="bg-white w-40 h-40 rounded-full flex items-center justify-center mx-auto border-8 border-pink-300 shadow-[8px_8px_0_#ffb6c1]">
+                <Camera size={80} className="text-pink-400" />
+              </div>
+              <h2 className="text-4xl brand-font text-pink-500">Let's take a photo!</h2>
+              <div className="flex flex-col sm:flex-row gap-6 justify-center">
+                <Button icon={Save} onClick={handleGoogleLogin}>Start (Host)</Button>
+                <Button icon={Users} variant="secondary" onClick={() => setAppState('ROLE_SELECT')}>Join Friend</Button>
+              </div>
+            </div>
+          )}
+
+          {appState === 'ROLE_SELECT' && (
+            <div className="text-center space-y-8 w-full max-w-md bg-white p-10 rounded-3xl border-4 border-pink-200 shadow-[8px_8px_0_#ffb6c1]">
+              <h2 className="text-3xl brand-font text-pink-500">Enter Room ID</h2>
+              <input type="text" placeholder="e.g. booth-abc123" className="w-full px-6 py-4 border-4 border-pink-100 rounded-2xl outline-none text-center font-mono text-2xl text-pink-600 font-bold transition-all focus:border-pink-400 focus:shadow-[4px_4px_0_#f472b6]"
+                value={joinIdInput} onChange={(e) => setJoinIdInput(e.target.value)} />
+              <Button icon={RefreshCcw} onClick={handleGuestJoin} className="w-full">Connect!</Button>
+              <button onClick={() => setAppState('LANDING')} className="text-lg text-pink-400 hover:text-pink-600 underline font-bold mt-4">Go Back</button>
+            </div>
+          )}
+
+          {appState === 'HOST_WAITING' && (
+            <div className="text-center space-y-8 bg-white p-10 rounded-3xl border-4 border-pink-200 shadow-[8px_8px_0_#ffb6c1]">
+              <Loader2 size={64} className="text-pink-400 animate-spin mx-auto" />
+              <h2 className="text-3xl brand-font text-pink-500">Waiting for friend...</h2>
+              <div className="p-6 bg-pink-50 border-4 border-pink-100 rounded-2xl flex flex-col gap-4 items-center">
+                <span className="text-gray-500 font-bold">Share this ID:</span>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-3xl text-pink-600 font-black">{peerId || '...'}</span>
+                  {peerId && (
+                    <button onClick={() => navigator.clipboard.writeText(peerId)} className="bg-pink-200 text-pink-700 p-3 rounded-xl hover:bg-pink-300 transition-colors shadow-sm">
+                      <Copy size={24}/>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {appState === 'GUEST_JOIN' && (
+            <div className="text-center space-y-6">
+              <Loader2 size={80} className="text-pink-400 animate-spin mx-auto" />
+              <h2 className="text-4xl brand-font text-pink-500">Connecting...</h2>
+            </div>
+          )}
+
+          {appState === 'BOOTH' && (
+            <BoothCamera 
+              canvasRef={canvasRef}
+              countdown={countdown}
+              flash={flash}
+              triggerSyncCountdown={triggerSyncCountdown}
+              hasPhotos={photos.length > 0}
+              onGoToGallery={() => setAppState('GALLERY')}
+              layoutStyle={layoutStyle}
+              onLayoutChange={(s) => { setLayoutStyle(s); sendData({ type: 'LAYOUT_CHANGE', layoutStyle: s }); }}
+              cameraFilter={cameraFilter}
+              onFilterChange={(f) => { setCameraFilter(f); sendData({ type: 'FILTER_CHANGE', cameraFilter: f }); }}
+            />
+          )}
+
+          {appState === 'DECORATE' && (
+            <BoothDecorate
+              basePhotoUrl={rawPhoto}
+              stickers={stickers}
+              onAddSticker={handleAddSticker}
+              onUpdateSticker={handleUpdateSticker}
+              onFinish={handleFinishDecorating}
+            />
+          )}
+
+          {appState === 'GALLERY' && (
+            <BoothGallery 
+              photos={photos}
+              role={role}
+              isUploading={isUploading}
+              uploadSuccess={uploadSuccess}
+              onBackToBooth={handleBackToBooth}
+              onSaveToDrive={saveToGoogleDrive}
+            />
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
 }
-
-export default App
