@@ -55,6 +55,20 @@ export default function App() {
     return URL.createObjectURL(blob);
   };
 
+  // NEW: A dedicated function to perfectly reset the booth state and free memory
+  const resetToBooth = useCallback(() => {
+    setAppState('BOOTH');
+    setRawPhoto(prev => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setStickers([]);
+    setIsFinishing(false);
+    setCountdown(null);
+    setIsUploading(false);
+    setUploadSuccess(false);
+  }, []);
+
   const safelyUpdatePhotos = useCallback((newPhotoUrl) => {
     setPhotos(prev => {
       let newHistory = [...prev, newPhotoUrl];
@@ -82,20 +96,33 @@ export default function App() {
     role, peerId, localStream, remoteStream, 
     startHostSession, startGuestSession, sendData, cleanupWebRTC 
   } = useWebRTC(setErrorMsg, (data) => {
+    console.log(`⚡ [App] Handling Action via WebRTC:`, data.type);
+    
     if (data.type === 'COUNTDOWN_TICK') setCountdown(data.count); 
-    else if (data.type === 'TAKE_PHOTO_NOW') {
-      setCountdown(null);
-      takePhotoAndDecorateLocal();
+    else if (data.type === 'PHOTO_TAKEN') {
+      console.log("📸 [App] Received actual photo from peer.");
+      triggerFlash();
+      const blobUrl = base64ToBlobUrl(data.photoUrl);
+      setRawPhoto(prev => {
+        if (prev) URL.revokeObjectURL(prev);
+        return blobUrl;
+      });
+      setStickers([]); 
+      setIsFinishing(false);
+      setAppState('DECORATE');
     }
     else if (data.type === 'BACK_TO_BOOTH') {
-      setAppState('BOOTH');
+      console.log("🔙 [App] Returning to booth via peer command.");
+      resetToBooth();
     }
     else if (data.type === 'LAYOUT_CHANGE') setLayoutStyle(data.layoutStyle);
     else if (data.type === 'FILTER_CHANGE') setCameraFilter(data.cameraFilter);
     else if (data.type === 'SYNC_STICKERS') {
+      console.log("🎨 [App] Syncing stickers from peer...", data.stickers);
       setStickers(data.stickers);
     }
     else if (data.type === 'INITIATE_FINISH') {
+      console.log("🏁 [App] Peer initiated FINISH. Triggering local save...");
       setIsFinishing(true);
     }
   });
@@ -109,9 +136,10 @@ export default function App() {
     }
   );
 
-  // Keep the WebRTC session alive when photo state changes.
+  // Removed `photos` and `rawPhoto` from this array so taking a photo doesn't destroy the network!
   useEffect(() => {
     return () => {
+      console.log("🧹 [App] Component unmounting, destroying WebRTC...");
       cleanupWebRTC();
     };
   }, [cleanupWebRTC]);
@@ -134,8 +162,13 @@ export default function App() {
       } else {
         clearInterval(interval);
         setCountdown(null);
-        sendData({ type: 'TAKE_PHOTO_NOW' });
-        takePhotoAndDecorateLocal();
+        sendData({ type: 'COUNTDOWN_TICK', count: null });
+        
+        triggerFlash();
+        // Give the browser 50ms to paint the white flash before blocking the CPU to take the photo
+        setTimeout(() => {
+          takePhotoAndDecorateLocal();
+        }, 50);
       }
     }, 1000);
   };
@@ -236,11 +269,11 @@ export default function App() {
     ctx.strokeText('✨ PURI-PURI BOOTH ✨', w / 2, h - 30);
     ctx.fillText('✨ PURI-PURI BOOTH ✨', w / 2, h - 30);
 
-    return canvas.toDataURL('image/jpeg', 0.85);
+    // Export at 0.75 quality to compress the file size, making network transfer instant
+    return canvas.toDataURL('image/jpeg', 0.75);
   };
 
   const takePhotoAndDecorateLocal = () => {
-    triggerFlash();
     const base64Url = capturePhoto();
     const blobUrl = base64ToBlobUrl(base64Url);
     
@@ -251,9 +284,13 @@ export default function App() {
     setStickers([]); 
     setIsFinishing(false);
     setAppState('DECORATE');
+    
+    console.log("📤 [App] Broadcasting actual generated photo...");
+    sendData({ type: 'PHOTO_TAKEN', photoUrl: base64Url });
   };
 
   const handleAddSticker = (emoji) => {
+    console.log(`[App] Adding sticker locally:`, emoji);
     setStickers(prev => {
       const newStickers = [...prev, { id: Date.now(), emoji, x: 640, y: 480, size: 120 }];
       sendData({ type: 'SYNC_STICKERS', stickers: newStickers });
@@ -270,11 +307,13 @@ export default function App() {
   };
 
   const handleInitiateFinish = () => {
+    console.log(`🏁 [App] Local Finish Button Clicked! Broadcasting INITIATE_FINISH.`);
     setIsFinishing(true);
     sendData({ type: 'INITIATE_FINISH' });
   };
 
   const handleFinishDecoratingLocal = useCallback((finalBase64Url) => {
+    console.log(`🖼️ [App] Local Finishing processing... Navigating to Gallery.`);
     const blobUrl = base64ToBlobUrl(finalBase64Url);
     safelyUpdatePhotos(blobUrl);
     setAppState('GALLERY');
@@ -317,7 +356,7 @@ export default function App() {
   };
 
   const handleBackToBooth = () => {
-    setAppState('BOOTH');
+    resetToBooth();
     sendData({ type: 'BACK_TO_BOOTH' });
   };
 
