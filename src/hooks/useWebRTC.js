@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 export const useWebRTC = (setErrorMsg, onDataMessage) => {
   const [role, setRole] = useState(null);
@@ -9,7 +9,13 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
 
   const peerRef = useRef(null);
   const connRef = useRef(null);
-  const localStreamRef = useRef(null); // FIX: Added ref to prevent useEffect loops
+  const localStreamRef = useRef(null); 
+
+  /* Keep the latest message handler in a ref so connection callbacks stay current. */
+  const onDataMessageRef = useRef(onDataMessage);
+  useEffect(() => {
+    onDataMessageRef.current = onDataMessage;
+  }, [onDataMessage]);
 
   const startCamera = async () => {
     try {
@@ -18,7 +24,7 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
         audio: false 
       });
       setLocalStream(stream);
-      localStreamRef.current = stream; // FIX: Store in ref silently
+      localStreamRef.current = stream; 
       return stream;
     } catch (err) {
       setErrorMsg("Camera access denied. You must allow camera access.");
@@ -27,11 +33,17 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
   };
 
   const setupDataChannel = useCallback((conn) => {
-    conn.on('open', () => console.log("P2P Data channel opened successfully."));
     conn.on('data', (data) => {
-      if (onDataMessage) onDataMessage(data);
+      if (onDataMessageRef.current) {
+        onDataMessageRef.current(data);
+      } else {
+        console.warn('⚠️ [WebRTC] onDataMessageRef is null!');
+      }
     });
-  }, [onDataMessage]);
+
+    conn.on('error', (err) => console.error('❌ [WebRTC Data Error]', err));
+    conn.on('close', () => console.warn('⚠️ [WebRTC Data Closed]'));
+  }, []); 
 
   const startHostSession = async (onReady) => {
     setErrorMsg('');
@@ -40,12 +52,13 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
 
     setRole('host');
     
-    // Using a custom ID to ensure fast connections
     const customId = 'booth-' + Math.random().toString(36).substring(2, 8);
     const peer = new window.Peer(customId, { debug: 2 });
     peerRef.current = peer;
 
-    peer.on('open', (id) => setPeerId(id));
+    peer.on('open', (id) => {
+      setPeerId(id);
+    });
 
     peer.on('connection', (conn) => {
       connRef.current = conn;
@@ -79,7 +92,7 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
     peerRef.current = peer;
 
     peer.on('open', () => {
-      const conn = peer.connect(joinId);
+      const conn = peer.connect(joinId, { reliable: true });
       connRef.current = conn;
       setupDataChannel(conn);
 
@@ -96,16 +109,21 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
   };
 
   const sendData = (data) => {
-    if (connRef.current && connRef.current.open) {
-      connRef.current.send(data);
+    if (connRef.current) {
+      if (connRef.current.open) {
+        connRef.current.send(data);
+      } else {
+        console.error(`❌ [WebRTC OUT FAILED] Connection exists but state is NOT open yet!`);
+      }
+    } else {
+      console.error(`❌ [WebRTC OUT FAILED] No connection object exists!`);
     }
   };
 
   const cleanupWebRTC = useCallback(() => {
-    // FIX: Read from the ref instead of state so this function never changes
     if (localStreamRef.current) localStreamRef.current.getTracks().forEach(track => track.stop());
     if (peerRef.current) peerRef.current.destroy();
-  }, []); // FIX: Empty dependency array
+  }, []);
 
   return {
     role, peerId, isConnected, localStream, remoteStream,
