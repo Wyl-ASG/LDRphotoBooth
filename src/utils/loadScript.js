@@ -4,6 +4,16 @@ export const loadScript = (src, id) => {
       resolve(true);
       return;
     }
+
+    const allowedSources = new Set([
+      'https://accounts.google.com/gsi/client',
+    ]);
+
+    if (!allowedSources.has(src)) {
+      reject(new Error(`Blocked script source: ${src}`));
+      return;
+    }
+
     const script = document.createElement('script');
     script.src = src;
     script.id = id;

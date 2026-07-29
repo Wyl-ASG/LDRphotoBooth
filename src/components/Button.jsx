@@ -10,7 +10,7 @@ export const Button = ({ onClick, children, variant = 'primary', className = '',
   };
 
   return (
-    <button onClick={onClick} className={`${baseStyle} ${variants[variant]} ${className}`} disabled={disabled}>
+    <button type="button" onClick={onClick} className={`${baseStyle} ${variants[variant]} ${className}`} disabled={disabled}>
       {Icon && <Icon size={24} className="stroke-[3]" />}
       <span className="text-xl tracking-wide">{children}</span>
     </button>

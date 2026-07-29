@@ -24,7 +24,8 @@ export const useGoogleAuth = (clientId, setErrorMsg, onAuthSuccess) => {
         },
       });
       client.requestAccessToken();
-    } catch (err) {
+    } catch (error) {
+      console.error('❌ [GoogleAuth] Failed to initialize token client.', error);
       setErrorMsg("Error initializing Google Auth. Did you replace the GOOGLE_CLIENT_ID?");
     }
   }, [clientId, setErrorMsg, onAuthSuccess]);

@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import Peer from 'peerjs';
 
 export const useWebRTC = (setErrorMsg, onDataMessage) => {
   const [role, setRole] = useState(null);
@@ -26,7 +27,8 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
       setLocalStream(stream);
       localStreamRef.current = stream; 
       return stream;
-    } catch (err) {
+    } catch (error) {
+      console.warn('⚠️ [WebRTC] Failed to access camera.', error);
       setErrorMsg("Camera access denied. You must allow camera access.");
       return null;
     }
@@ -53,7 +55,7 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
     setRole('host');
     
     const customId = 'booth-' + Math.random().toString(36).substring(2, 8);
-    const peer = new window.Peer(customId, { debug: 2 });
+    const peer = new Peer(customId, { debug: 2 });
     peerRef.current = peer;
 
     peer.on('open', (id) => {
@@ -88,7 +90,7 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
     if (!stream) return false;
 
     setRole('guest');
-    const peer = new window.Peer({ debug: 2 });
+    const peer = new Peer({ debug: 2 });
     peerRef.current = peer;
 
     peer.on('open', () => {

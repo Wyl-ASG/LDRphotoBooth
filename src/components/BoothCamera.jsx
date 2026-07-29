@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Camera, Image as ImageIcon, Columns, Rows, PictureInPicture, Wand2 } from 'lucide-react';
 import { Button } from './Button';
+import { BOOTH_PROTOCOL } from '../utils/boothProtocol';
 
 export const BoothCamera = ({ 
   countdown, 
@@ -36,24 +37,42 @@ export const BoothCamera = ({
 
   const video1 = role === 'host' ? displayLocalVideoRef : displayRemoteVideoRef;
   const video2 = role === 'guest' ? displayLocalVideoRef : displayRemoteVideoRef;
+  const activeLayoutButtonClass = 'bg-pink-100 text-pink-600';
+  const inactiveLayoutButtonClass = 'text-gray-400 hover:bg-gray-50';
 
   return (
     <div className="flex flex-col items-center w-full relative animate-fade-in">
       
       <div className="flex flex-wrap justify-center gap-4 mb-4">
         <div className="flex gap-2 bg-white p-2 rounded-xl shadow-sm border border-pink-200">
-          <button onClick={() => onLayoutChange('split-horizontal')} className={`p-2 rounded-lg transition-colors ${layoutStyle === 'split-horizontal' ? 'bg-pink-100 text-pink-600' : 'text-gray-400 hover:bg-gray-50'}`}><Columns size={20} /></button>
-          <button onClick={() => onLayoutChange('split-vertical')} className={`p-2 rounded-lg transition-colors ${layoutStyle === 'split-vertical' ? 'bg-pink-100 text-pink-600' : 'text-gray-400 hover:bg-gray-50'}`}><Rows size={20} /></button>
-          <button onClick={() => onLayoutChange('pip')} className={`p-2 rounded-lg transition-colors ${layoutStyle === 'pip' ? 'bg-pink-100 text-pink-600' : 'text-gray-400 hover:bg-gray-50'}`}><PictureInPicture size={20} /></button>
+          {BOOTH_PROTOCOL.layouts.map((layout) => {
+            const Icon = layout.value === 'split-horizontal'
+              ? Columns
+              : layout.value === 'split-vertical'
+                ? Rows
+                : PictureInPicture;
+
+            return (
+              <button
+                key={layout.value}
+                onClick={() => onLayoutChange(layout.value)}
+                className={`p-2 rounded-lg transition-colors ${layoutStyle === layout.value ? activeLayoutButtonClass : inactiveLayoutButtonClass}`}
+                aria-label={layout.label}
+              >
+                <Icon size={20} />
+              </button>
+            );
+          })}
         </div>
 
         <div className="flex gap-2 bg-white p-2 rounded-xl shadow-sm border border-pink-200 items-center px-4">
           <Wand2 size={18} className="text-pink-400 mr-2" />
           <select value={cameraFilter} onChange={(e) => onFilterChange(e.target.value)} className="bg-transparent text-gray-600 font-bold outline-none cursor-pointer">
-            <option value="none">Normal</option>
-            <option value="kawaii">🌸 Kawaii</option>
-            <option value="vintage">🎞️ Vintage</option>
-            <option value="bnw">🖤 B&W</option>
+            {BOOTH_PROTOCOL.filters.map((filter) => (
+              <option key={filter.value} value={filter.value}>
+                {filter.label}
+              </option>
+            ))}
           </select>
         </div>
       </div>

@@ -2,6 +2,8 @@ import React, { useRef, useEffect, useState } from 'react';
 import { CheckCircle } from 'lucide-react';
 import { Button } from './Button';
 
+const STAMPS = ['🐱', '🐰', '🎀', '✨', '💖', '👑', '😎', '⭐'];
+
 export const BoothDecorate = ({ 
   basePhotoUrl, 
   stickers, 
@@ -15,6 +17,12 @@ export const BoothDecorate = ({
   const [dragState, setDragState] = useState({ id: null, x: 0, y: 0 });
   const [bgImg, setBgImg] = useState(null);
   const lastSyncRef = useRef(0);
+  const dragStateRef = useRef(dragState);
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    dragStateRef.current = dragState;
+  }, [dragState]);
 
   /* Load the background photo into an offscreen image before drawing the canvas. */
   useEffect(() => {
@@ -23,6 +31,10 @@ export const BoothDecorate = ({
       setBgImg(img);
     };
     img.src = basePhotoUrl;
+
+    return () => {
+      img.onload = null;
+    };
   }, [basePhotoUrl]);
 
   /* Redraw the composition whenever the photo or sticker state changes. */
@@ -57,6 +69,8 @@ export const BoothDecorate = ({
 
   /* Translate pointer coordinates into canvas space for sticker dragging. */
   const handlePointerDown = (e) => {
+    if (!canvasRef.current) return;
+
     const rect = canvasRef.current.getBoundingClientRect();
     const scaleX = canvasRef.current.width / rect.width;
     const scaleY = canvasRef.current.height / rect.height;
@@ -68,13 +82,15 @@ export const BoothDecorate = ({
       const s = stickers[i];
       if (Math.abs(s.x - x) < s.size / 2 && Math.abs(s.y - y) < s.size / 2) {
         setDragState({ id: s.id, x, y });
+        canvasRef.current.setPointerCapture(e.pointerId);
         return;
       }
     }
   };
 
   const handlePointerMove = (e) => {
-    if (!dragState.id) return;
+    if (!dragStateRef.current.id || !canvasRef.current) return;
+
     const rect = canvasRef.current.getBoundingClientRect();
     const scaleX = canvasRef.current.width / rect.width;
     const scaleY = canvasRef.current.height / rect.height;
@@ -82,24 +98,47 @@ export const BoothDecorate = ({
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    setDragState(prev => ({ ...prev, x, y }));
+    dragStateRef.current = { ...dragStateRef.current, x, y };
+
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setDragState({ ...dragStateRef.current });
+      });
+    }
 
     const now = Date.now();
     // Limit sync traffic while dragging so peers stay responsive.
     if (now - lastSyncRef.current > 50) {
-      onUpdateSticker(dragState.id, { x, y });
+      onUpdateSticker(dragStateRef.current.id, { x, y });
       lastSyncRef.current = now;
     }
   };
 
-  const handlePointerUp = () => {
-    if (dragState.id) {
-      onUpdateSticker(dragState.id, { x: dragState.x, y: dragState.y });
+  const handlePointerUp = (e) => {
+    if (canvasRef.current && e?.pointerId !== undefined) {
+      canvasRef.current.releasePointerCapture(e.pointerId);
+    }
+
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+
+    if (dragStateRef.current.id) {
+      onUpdateSticker(dragStateRef.current.id, { x: dragStateRef.current.x, y: dragStateRef.current.y });
     }
     setDragState({ id: null, x: 0, y: 0 });
+    dragStateRef.current = { id: null, x: 0, y: 0 };
   };
 
-  const STAMPS = ['🐱', '🐰', '🎀', '✨', '💖', '👑', '😎', '⭐'];
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, []);
 
   /* Render the sticker palette and the decoration canvas. */
   return (
