@@ -175,12 +175,14 @@ export const useBoothController = () => {
     };
 
     const pad = 24;
+    const primaryVideo = hiddenLocalVideoRef.current;
+    const secondaryVideo = hiddenRemoteVideoRef.current;
 
     if (currentLayout === 'split-horizontal') {
       const halfW = (w / 2) - (pad * 1.5);
       const drawH = h - (pad * 2);
-      drawVideo(role === 'host' ? hiddenLocalVideoRef.current : hiddenRemoteVideoRef.current, pad, pad, halfW, drawH);
-      drawVideo(role === 'guest' ? hiddenLocalVideoRef.current : hiddenRemoteVideoRef.current, w / 2 + (pad / 2), pad, halfW, drawH);
+      drawVideo(primaryVideo, pad, pad, halfW, drawH);
+      drawVideo(secondaryVideo, w / 2 + (pad / 2), pad, halfW, drawH);
 
       ctx.filter = 'none';
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 16;
@@ -189,8 +191,8 @@ export const useBoothController = () => {
     } else if (currentLayout === 'split-vertical') {
       const drawW = w - (pad * 2);
       const halfH = (h / 2) - (pad * 1.5);
-      drawVideo(role === 'host' ? hiddenLocalVideoRef.current : hiddenRemoteVideoRef.current, pad, pad, drawW, halfH);
-      drawVideo(role === 'guest' ? hiddenLocalVideoRef.current : hiddenRemoteVideoRef.current, pad, h / 2 + (pad / 2), drawW, halfH);
+      drawVideo(primaryVideo, pad, pad, drawW, halfH);
+      drawVideo(secondaryVideo, pad, h / 2 + (pad / 2), drawW, halfH);
 
       ctx.filter = 'none';
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 16;
@@ -202,8 +204,8 @@ export const useBoothController = () => {
       const pipW = drawW / 3.5;
       const pipH = drawH / 3.5;
 
-      drawVideo(role === 'host' ? hiddenLocalVideoRef.current : hiddenRemoteVideoRef.current, pad, pad, drawW, drawH);
-      drawVideo(role === 'guest' ? hiddenLocalVideoRef.current : hiddenRemoteVideoRef.current, w - pipW - (pad * 2), h - pipH - (pad * 2), pipW, pipH);
+      drawVideo(primaryVideo, pad, pad, drawW, drawH);
+      drawVideo(secondaryVideo, w - pipW - (pad * 2), h - pipH - (pad * 2), pipW, pipH);
 
       ctx.filter = 'none';
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 16;
