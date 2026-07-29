@@ -15,7 +15,8 @@ export const BoothCamera = ({
   onFilterChange,
   localStream,
   remoteStream,
-  role
+  role,
+  canTakePhoto = true
 }) => {
   // Keep display refs separate so each stream stays attached to the right video element.
   const displayLocalVideoRef = useRef(null);
@@ -113,7 +114,7 @@ export const BoothCamera = ({
       </div>
       
       <div className="flex gap-4">
-        <Button icon={Camera} onClick={triggerSyncCountdown} className="px-10 py-4 text-lg">
+        <Button icon={Camera} onClick={triggerSyncCountdown} disabled={!canTakePhoto} className="px-10 py-4 text-lg">
           Take Photo
         </Button>
         {hasPhotos && (

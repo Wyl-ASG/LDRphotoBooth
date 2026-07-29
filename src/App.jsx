@@ -27,6 +27,7 @@ export default function App() {
     hiddenRemoteVideoRef,
     role,
     peerId,
+    canTakePhoto,
     localStream,
     remoteStream,
     handleGoogleLogin,
@@ -137,6 +138,7 @@ export default function App() {
               localStream={localStream}
               remoteStream={remoteStream}
               role={role}
+              canTakePhoto={canTakePhoto}
             />
           )}
 

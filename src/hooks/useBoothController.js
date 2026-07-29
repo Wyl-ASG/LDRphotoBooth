@@ -24,6 +24,7 @@ export const useBoothController = () => {
 
   const hiddenLocalVideoRef = useRef(null);
   const hiddenRemoteVideoRef = useRef(null);
+  const countdownIntervalRef = useRef(null);
   const latestStateRef = useRef({ layoutStyle, cameraFilter });
 
   useEffect(() => {
@@ -32,6 +33,10 @@ export const useBoothController = () => {
 
   const resetToBooth = useCallback(() => {
     setAppState('BOOTH');
+    if (countdownIntervalRef.current !== null) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
     setRawPhoto(null);
     setStickers([]);
     setIsFinishing(false);
@@ -64,7 +69,7 @@ export const useBoothController = () => {
   }, []);
 
   const { 
-    role, peerId, localStream, remoteStream,
+    role, peerId, isConnected, localStream, remoteStream,
     startHostSession, startGuestSession, sendData, cleanupWebRTC,
   } = useWebRTC(setErrorMsg, (data) => {
     const normalizedData = normalizePeerMessage(data);
@@ -105,6 +110,10 @@ export const useBoothController = () => {
 
   useEffect(() => {
     return () => {
+      if (countdownIntervalRef.current !== null) {
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
       cleanupWebRTC();
     };
   }, [cleanupWebRTC]);
@@ -141,8 +150,8 @@ export const useBoothController = () => {
 
     const currentLayout = latestStateRef.current.layoutStyle;
     const currentFilter = latestStateRef.current.cameraFilter;
-
-    ctx.fillStyle = '#fff0f5';
+  const primaryVideo = role === 'host' ? hiddenLocalVideoRef.current : hiddenRemoteVideoRef.current;
+  const secondaryVideo = role === 'host' ? hiddenRemoteVideoRef.current : hiddenLocalVideoRef.current;
     ctx.fillRect(0, 0, w, h);
 
     if (currentFilter === 'kawaii') ctx.filter = 'brightness(1.15) saturate(1.3) contrast(1.05) sepia(0.2) hue-rotate(-5deg)';
@@ -226,17 +235,20 @@ export const useBoothController = () => {
   };
 
   const triggerSyncCountdown = () => {
+    if (countdownIntervalRef.current !== null) return;
+
     let count = 3;
     setCountdown(count);
     sendData({ type: BOOTH_PROTOCOL.messageTypes.countdownTick, count });
 
-    const interval = setInterval(() => {
+    countdownIntervalRef.current = setInterval(() => {
       count -= 1;
       if (count > 0) {
         setCountdown(count);
         sendData({ type: BOOTH_PROTOCOL.messageTypes.countdownTick, count });
       } else {
-        clearInterval(interval);
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
         setCountdown(null);
         sendData({ type: BOOTH_PROTOCOL.messageTypes.countdownTick, count: null });
 
@@ -350,6 +362,7 @@ export const useBoothController = () => {
     hiddenRemoteVideoRef,
     role,
     peerId,
+    isConnected,
     localStream,
     remoteStream,
     googleToken,
@@ -373,5 +386,6 @@ export const useBoothController = () => {
     handleGuestJoin,
     handleBackToBooth,
     saveToGoogleDrive,
+    canTakePhoto: isConnected,
   };
 };
