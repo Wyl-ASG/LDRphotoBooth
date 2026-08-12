@@ -24,6 +24,7 @@ export const useBoothController = () => {
   const [customDate, setCustomDate] = useState(BOOTH_PROTOCOL.defaults.customDate);
   const [rawPhoto, setRawPhoto] = useState(null);
   const [stickers, setStickers] = useState([]);
+  const [isTakingPhotos, setIsTakingPhotos] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
@@ -37,6 +38,7 @@ export const useBoothController = () => {
     setRawPhoto(null);
     setStickers([]);
     setIsFinishing(false);
+    setIsTakingPhotos(false);
     setCountdown(null);
     setCapturedPoses([]);
     setCurrentPoseIndex(0);
@@ -81,12 +83,13 @@ export const useBoothController = () => {
     }
 
     if (normalizedData.type === BOOTH_PROTOCOL.messageTypes.countdownTick) {
+      setIsTakingPhotos(true);
       setCountdown(normalizedData.count);
       setCurrentPoseIndex(normalizedData.poseIndex || 0);
       setTotalPoses(normalizedData.totalPoses || 1);
       if (normalizedData.count === 0) {
         triggerFlash();
-        const posePair = captureSinglePosePair();
+        const posePair = captureSinglePosePair(normalizedData.poseIndex || 0);
         setCapturedPoses((prev) => {
           const next = [...prev];
           next[normalizedData.poseIndex || 0] = posePair;
@@ -98,6 +101,7 @@ export const useBoothController = () => {
       setRawPhoto(normalizedData.photoUrl);
       setStickers([]);
       setIsFinishing(false);
+      setIsTakingPhotos(false);
       setAppState('DECORATE');
     } else if (normalizedData.type === BOOTH_PROTOCOL.messageTypes.backToBooth) {
       resetToBooth();
@@ -126,9 +130,14 @@ export const useBoothController = () => {
     latestStateRef.current = { layoutStyle, cameraFilter, role, customTitle, customDate };
   }, [layoutStyle, cameraFilter, role, customTitle, customDate]);
 
-  const { googleToken, handleGoogleLogin } = useGoogleAuth(GOOGLE_CLIENT_ID, setErrorMsg, () => {
+  const handleStartHostDirect = useCallback(() => {
+    setErrorMsg('');
     setAppState('HOST_WAITING');
     startHostSession(() => setAppState('BOOTH'));
+  }, [startHostSession]);
+
+  const { googleToken, handleGoogleLogin } = useGoogleAuth(GOOGLE_CLIENT_ID, setErrorMsg, () => {
+    handleStartHostDirect();
   });
 
   useEffect(() => {
@@ -170,44 +179,51 @@ export const useBoothController = () => {
   /**
    * Snaps a single pose pair (Host frame + Guest frame)
    */
-  const captureSinglePosePair = () => {
+  const captureSinglePosePair = (poseIndex = 0) => {
     const currentRole = latestStateRef.current.role;
+    const currentLayoutId = latestStateRef.current.layoutStyle;
+    const activeLayout = getLayoutById(currentLayoutId);
+
+    const activeBox = (activeLayout.boxes && activeLayout.boxes.find((b) => b.poseIndex === poseIndex)) || activeLayout.boxes[0];
+
+    const halfBoxW = ((activeBox.w / 100) * activeLayout.canvasWidth) / 2;
+    const halfBoxH = (activeBox.h / 100) * activeLayout.canvasHeight;
+    const targetRatio = halfBoxW / halfBoxH;
 
     const primaryVideo = currentRole === 'host' ? localVideoRef.current : remoteVideoRef.current;
     const secondaryVideo = currentRole === 'guest' ? localVideoRef.current : remoteVideoRef.current;
 
-    const createHalfCanvas = (videoElem) => {
+    const createHalfCanvas = (videoElem, ratio) => {
       const c = document.createElement('canvas');
-      c.width = 640;
-      c.height = 480;
+      c.width = 600;
+      c.height = Math.round(600 / ratio);
       const ctx = c.getContext('2d');
       if (videoElem && videoElem.readyState >= 2 && (videoElem.videoWidth || videoElem.width)) {
         const vw = videoElem.videoWidth || videoElem.width || 640;
         const vh = videoElem.videoHeight || videoElem.height || 480;
         const sourceRatio = vw / vh;
-        const targetRatio = 640 / 480;
         let sWidth = vw;
         let sHeight = vh;
         let sx = 0;
         let sy = 0;
-        if (sourceRatio > targetRatio) {
-          sWidth = vh * targetRatio;
+        if (sourceRatio > ratio) {
+          sWidth = vh * ratio;
           sx = (vw - sWidth) / 2;
         } else {
-          sHeight = vw / targetRatio;
+          sHeight = vw / ratio;
           sy = (vh - sHeight) / 2;
         }
-        ctx.drawImage(videoElem, sx, sy, sWidth, sHeight, 0, 0, 640, 480);
+        ctx.drawImage(videoElem, sx, sy, sWidth, sHeight, 0, 0, c.width, c.height);
       } else {
         ctx.fillStyle = '#fbcfe8';
-        ctx.fillRect(0, 0, 640, 480);
+        ctx.fillRect(0, 0, c.width, c.height);
       }
       return c.toDataURL('image/png');
     };
 
     return {
-      host: createHalfCanvas(primaryVideo),
-      guest: createHalfCanvas(secondaryVideo),
+      host: createHalfCanvas(primaryVideo, targetRatio),
+      guest: createHalfCanvas(secondaryVideo, targetRatio),
     };
   };
 
@@ -215,77 +231,89 @@ export const useBoothController = () => {
    * Executes multi-pose capture session based on active layout pose count.
    */
   const triggerSyncCountdown = async () => {
-    const activeLayout = getLayoutById(latestStateRef.current.layoutStyle);
-    const posesNeeded = activeLayout.poses;
-    const accumulatedPoses = [];
+    if (isTakingPhotos) return;
+    setIsTakingPhotos(true);
+    try {
+      const activeLayout = getLayoutById(latestStateRef.current.layoutStyle);
+      const posesNeeded = activeLayout.poses;
+      const accumulatedPoses = [];
 
-    setCapturedPoses([]);
+      setCapturedPoses([]);
 
-    for (let p = 0; p < posesNeeded; p++) {
-      setCurrentPoseIndex(p);
-      setTotalPoses(posesNeeded);
+      for (let p = 0; p < posesNeeded; p++) {
+        setCurrentPoseIndex(p);
+        setTotalPoses(posesNeeded);
 
-      // Countdown 3..2..1
-      for (let c = 3; c >= 1; c--) {
-        setCountdown(c);
+        // Countdown 3..2..1
+        for (let c = 3; c >= 1; c--) {
+          setCountdown(c);
+          sendData({
+            type: BOOTH_PROTOCOL.messageTypes.countdownTick,
+            count: c,
+            poseIndex: p,
+            totalPoses: posesNeeded,
+          });
+          await new Promise((res) => setTimeout(res, 1000));
+        }
+
+        setCountdown(0);
         sendData({
           type: BOOTH_PROTOCOL.messageTypes.countdownTick,
-          count: c,
+          count: 0,
           poseIndex: p,
           totalPoses: posesNeeded,
         });
-        await new Promise((res) => setTimeout(res, 1000));
+
+        triggerFlash();
+        await new Promise((res) => setTimeout(res, 80));
+
+        const posePair = captureSinglePosePair(p);
+        accumulatedPoses.push(posePair);
+        setCapturedPoses([...accumulatedPoses]);
+
+        setCountdown(null);
+        sendData({
+          type: BOOTH_PROTOCOL.messageTypes.countdownTick,
+          count: null,
+          poseIndex: p,
+          totalPoses: posesNeeded,
+        });
+
+        // Pause between poses if more remain
+        if (p < posesNeeded - 1) {
+          await new Promise((res) => setTimeout(res, 1200));
+        }
       }
 
-      setCountdown(0);
-      sendData({
-        type: BOOTH_PROTOCOL.messageTypes.countdownTick,
-        count: 0,
-        poseIndex: p,
-        totalPoses: posesNeeded,
+      // All poses snapped! Compile layout canvas.
+      const compiledPhotoUrl = await compileLayoutCanvas({
+        layoutId: latestStateRef.current.layoutStyle,
+        poseImages: accumulatedPoses,
+        customTitle: latestStateRef.current.customTitle,
+        customDate: latestStateRef.current.customDate,
+        cameraFilter: latestStateRef.current.cameraFilter,
       });
 
-      triggerFlash();
-      await new Promise((res) => setTimeout(res, 80));
+      setRawPhoto(compiledPhotoUrl);
+      setStickers([]);
+      setIsFinishing(false);
+      setAppState('DECORATE');
 
-      const posePair = captureSinglePosePair();
-      accumulatedPoses.push(posePair);
-      setCapturedPoses([...accumulatedPoses]);
-
-      setCountdown(null);
-      sendData({
-        type: BOOTH_PROTOCOL.messageTypes.countdownTick,
-        count: null,
-        poseIndex: p,
-        totalPoses: posesNeeded,
-      });
-
-      // Pause between poses if more remain
-      if (p < posesNeeded - 1) {
-        await new Promise((res) => setTimeout(res, 1200));
-      }
+      sendData({ type: BOOTH_PROTOCOL.messageTypes.photoTaken, photoUrl: compiledPhotoUrl });
+    } catch (err) {
+      console.error('Error during photo capture:', err);
+    } finally {
+      setIsTakingPhotos(false);
     }
-
-    // All poses snapped! Compile layout canvas.
-    const compiledPhotoUrl = await compileLayoutCanvas({
-      layoutId: latestStateRef.current.layoutStyle,
-      poseImages: accumulatedPoses,
-      customTitle: latestStateRef.current.customTitle,
-      customDate: latestStateRef.current.customDate,
-      cameraFilter: latestStateRef.current.cameraFilter,
-    });
-
-    setRawPhoto(compiledPhotoUrl);
-    setStickers([]);
-    setIsFinishing(false);
-    setAppState('DECORATE');
-
-    sendData({ type: BOOTH_PROTOCOL.messageTypes.photoTaken, photoUrl: compiledPhotoUrl });
   };
 
-  const handleAddSticker = (emoji) => {
+  const handleAddSticker = (emoji, x, y) => {
+    const activeLayout = getLayoutById(latestStateRef.current.layoutStyle);
+    const defaultX = x ?? Math.round((activeLayout?.canvasWidth || 1800) / 2);
+    const defaultY = y ?? Math.round((activeLayout?.canvasHeight || 1200) / 2);
+
     setStickers((prev) => {
-      const newStickers = [...prev, { id: Date.now(), emoji, x: 640, y: 480, size: 120 }];
+      const newStickers = [...prev, { id: Date.now() + Math.random(), emoji, x: defaultX, y: defaultY, size: 120 }];
       sendData({ type: BOOTH_PROTOCOL.messageTypes.syncStickers, stickers: newStickers });
       return newStickers;
     });
@@ -315,33 +343,49 @@ export const useBoothController = () => {
     [safelyUpdatePhotos]
   );
 
-  const saveToGoogleDrive = async () => {
-    if (!googleToken || photos.length === 0) return;
-    setIsUploading(true);
-    setUploadSuccess(false);
+  const uploadToDriveWithToken = useCallback(
+    async (token) => {
+      if (!token || photos.length === 0) return;
+      setIsUploading(true);
+      setUploadSuccess(false);
 
-    try {
-      const blob = dataUrlToBlob(photos[photos.length - 1]);
-      const metadata = { name: `Purikura_${Date.now()}.jpg`, mimeType: 'image/jpeg' };
-      const form = new FormData();
-      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-      form.append('file', blob);
+      try {
+        const blob = dataUrlToBlob(photos[photos.length - 1]);
+        const metadata = { name: `Purikura_${Date.now()}.jpg`, mimeType: 'image/jpeg' };
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        form.append('file', blob);
 
-      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${googleToken}` },
-        body: form,
+        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: form,
+        });
+
+        if (!res.ok) throw new Error('Upload failed');
+        setUploadSuccess(true);
+        setTimeout(() => setUploadSuccess(false), 3000);
+      } catch (error) {
+        setErrorMsg(`Upload failed: ${error.message}`);
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [photos]
+  );
+
+  const saveToGoogleDrive = useCallback(async () => {
+    if (photos.length === 0) return;
+    if (googleToken) {
+      await uploadToDriveWithToken(googleToken);
+    } else {
+      handleGoogleLogin(async (newToken) => {
+        if (newToken) {
+          await uploadToDriveWithToken(newToken);
+        }
       });
-
-      if (!res.ok) throw new Error('Upload failed');
-      setUploadSuccess(true);
-      setTimeout(() => setUploadSuccess(false), 3000);
-    } catch (error) {
-      setErrorMsg(`Upload failed: ${error.message}`);
-    } finally {
-      setIsUploading(false);
     }
-  };
+  }, [photos, googleToken, uploadToDriveWithToken, handleGoogleLogin]);
 
   const handleGuestJoin = async () => {
     setAppState('GUEST_JOIN');
@@ -375,6 +419,7 @@ export const useBoothController = () => {
     setCustomDate,
     rawPhoto,
     stickers,
+    isTakingPhotos,
     isFinishing,
     isUploading,
     uploadSuccess,
@@ -385,6 +430,8 @@ export const useBoothController = () => {
     localStream,
     remoteStream,
     googleToken,
+    handleStartHostDirect,
+    handleStartHostWithGoogle: handleGoogleLogin,
     handleGoogleLogin,
     handleGoToGallery,
     handleOpenRoleSelect,

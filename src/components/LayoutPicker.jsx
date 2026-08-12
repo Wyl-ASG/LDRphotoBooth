@@ -131,35 +131,25 @@ export const LayoutPickerModal = ({
                     viewBox={`0 0 ${layout.canvasWidth} ${layout.canvasHeight}`}
                     className="w-full h-full object-contain"
                   >
-                    {/* Dark card background */}
                     <rect x="0" y="0" width={layout.canvasWidth} height={layout.canvasHeight} fill="#111111" />
 
-                    {/* Photo Boxes */}
                     {layout.boxes.map((box, idx) => {
                       const bx = (box.x / 100) * layout.canvasWidth;
                       const by = (box.y / 100) * layout.canvasHeight;
                       const bw = (box.w / 100) * layout.canvasWidth;
                       const bh = (box.h / 100) * layout.canvasHeight;
 
-                      const border = Math.max(4, Math.min(bw, bh) * 0.03);
-                      const ix = bx + border;
-                      const iy = by + border;
-                      const iw = bw - border * 2;
-                      const ih = bh - border * 2;
+                      const ix = bx;
+                      const iy = by;
+                      const iw = bw;
+                      const ih = bh;
                       const halfW = iw / 2;
 
                       return (
                         <g key={idx}>
-                          {/* Outer White Frame */}
-                          <rect x={bx} y={by} width={bw} height={bh} fill="#ffffff" rx={Math.min(bw, bh) * 0.02} />
+                          <rect x={ix} y={iy} width={halfW} height={ih} fill="#fce7f3" rx={Math.min(bw, bh) * 0.01} />
+                          <rect x={ix + halfW} y={iy} width={halfW} height={ih} fill="#fbcfe8" rx={Math.min(bw, bh) * 0.01} />
 
-                          {/* Left Half (Person 1) - 0 gap */}
-                          <rect x={ix} y={iy} width={halfW} height={ih} fill="#fce7f3" />
-
-                          {/* Right Half (Person 2) - 0 gap */}
-                          <rect x={ix + halfW} y={iy} width={halfW} height={ih} fill="#fbcfe8" />
-
-                          {/* Divider line visual indicator */}
                           <line
                             x1={ix + halfW}
                             y1={iy}
@@ -170,14 +160,12 @@ export const LayoutPickerModal = ({
                             strokeDasharray="4 4"
                           />
 
-                          {/* Mini avatars indication */}
                           <circle cx={ix + halfW / 2} cy={iy + ih / 2} r={Math.min(halfW, ih) * 0.22} fill="#ec4899" opacity="0.6" />
                           <circle cx={ix + halfW + halfW / 2} cy={iy + ih / 2} r={Math.min(halfW, ih) * 0.22} fill="#3b82f6" opacity="0.6" />
                         </g>
                       );
                     })}
 
-                    {/* Text sections */}
                     {(layout.headers || []).concat(layout.footers || []).map((sec, idx) => {
                       const sx = (sec.x / 100) * layout.canvasWidth;
                       const sy = (sec.y / 100) * layout.canvasHeight;

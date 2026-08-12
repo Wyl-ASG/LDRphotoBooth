@@ -144,6 +144,19 @@ export const BoothDecorate = ({
     };
   }, []);
 
+  const handleAddEmoji = (emoji) => {
+    let centerX = 900;
+    let centerY = 600;
+    if (canvasRef.current && canvasRef.current.width && canvasRef.current.height) {
+      centerX = Math.round(canvasRef.current.width / 2);
+      centerY = Math.round(canvasRef.current.height / 2);
+    } else if (bgImg) {
+      centerX = Math.round(bgImg.naturalWidth / 2);
+      centerY = Math.round(bgImg.naturalHeight / 2);
+    }
+    onAddSticker(emoji, centerX, centerY);
+  };
+
   const aspectRatio = bgImg ? bgImg.naturalWidth / bgImg.naturalHeight : 1.5;
 
   return (
@@ -155,7 +168,7 @@ export const BoothDecorate = ({
         {STAMPS.map((emoji) => (
           <button
             key={emoji}
-            onClick={() => onAddSticker(emoji)}
+            onClick={() => handleAddEmoji(emoji)}
             className="text-3xl hover:scale-125 transition-transform active:scale-95 bg-pink-50 p-2 rounded-xl"
           >
             {emoji}
@@ -164,7 +177,7 @@ export const BoothDecorate = ({
       </div>
 
       <div
-        className={`w-full ${aspectRatio < 0.5 ? 'max-w-xs sm:max-w-sm' : aspectRatio < 1 ? 'max-w-md' : 'max-w-3xl'} bg-neutral-900 rounded-2xl border-4 border-white shadow-lg overflow-hidden relative mb-6 cursor-crosshair flex items-center justify-center`}
+        className={`w-full ${aspectRatio < 0.5 ? 'max-w-xs sm:max-w-sm' : aspectRatio < 1 ? 'max-w-md' : 'max-w-2xl'} bg-neutral-950 rounded-2xl border border-neutral-800 shadow-2xl overflow-hidden relative mb-6 cursor-crosshair flex items-center justify-center`}
         style={{ aspectRatio }}
       >
         <canvas

@@ -25,6 +25,7 @@ export default function App() {
     customDate,
     rawPhoto,
     stickers,
+    isTakingPhotos,
     isFinishing,
     isUploading,
     uploadSuccess,
@@ -34,6 +35,8 @@ export default function App() {
     peerId,
     localStream,
     remoteStream,
+    handleStartHostDirect,
+    handleStartHostWithGoogle,
     handleGoogleLogin,
     handleGoToGallery,
     handleOpenRoleSelect,
@@ -85,9 +88,16 @@ export default function App() {
         </div>
 
         {errorMsg && (
-          <div className="bg-red-100 border-l-8 border-red-500 p-4 m-6 rounded-r-xl flex items-center gap-3 shadow-md">
-            <XCircle className="text-red-500 shrink-0" size={28} />
-            <p className="text-red-700 font-bold text-lg">{errorMsg}</p>
+          <div className="bg-red-100 border-l-8 border-red-500 p-4 m-6 rounded-r-xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-md">
+            <div className="flex items-center gap-3">
+              <XCircle className="text-red-500 shrink-0" size={28} />
+              <p className="text-red-700 font-bold text-lg">{errorMsg}</p>
+            </div>
+            {appState === 'LANDING' && (
+              <Button icon={Camera} onClick={handleStartHostDirect} className="text-sm py-2 px-4 whitespace-nowrap shrink-0">
+                Host Without Google
+              </Button>
+            )}
           </div>
         )}
 
@@ -98,8 +108,9 @@ export default function App() {
                 <Camera size={80} className="text-pink-400" />
               </div>
               <h2 className="text-4xl brand-font text-pink-500">Let's take a photo!</h2>
-              <div className="flex flex-col sm:flex-row gap-6 justify-center">
-                <Button icon={Save} onClick={handleGoogleLogin}>Start (Host)</Button>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center flex-wrap">
+                <Button icon={Camera} onClick={handleStartHostDirect}>Start (Host)</Button>
+                <Button icon={Save} variant="secondary" onClick={handleStartHostWithGoogle}>Host + Google Drive</Button>
                 <Button icon={Users} variant="secondary" onClick={handleOpenRoleSelect}>Join Friend</Button>
               </div>
             </div>
@@ -148,6 +159,7 @@ export default function App() {
           {appState === 'BOOTH' && (
             <BoothCamera
               countdown={countdown}
+              isTakingPhotos={isTakingPhotos}
               currentPoseIndex={currentPoseIndex}
               totalPoses={totalPoses}
               capturedPoses={capturedPoses}

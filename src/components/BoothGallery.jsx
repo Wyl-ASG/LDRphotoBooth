@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Image as ImageIcon, Save, Loader2, RefreshCcw, CheckCircle2, Download } from 'lucide-react';
 import { Button } from './Button';
 
@@ -11,6 +11,18 @@ export const BoothGallery = ({
   onSaveToDrive 
 }) => {
   const latestPhoto = photos.length > 0 ? photos[photos.length - 1] : null;
+  const [aspectRatio, setAspectRatio] = useState(null);
+
+  useEffect(() => {
+    if (!latestPhoto) return;
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth && img.naturalHeight) {
+        setAspectRatio(img.naturalWidth / img.naturalHeight);
+      }
+    };
+    img.src = latestPhoto;
+  }, [latestPhoto]);
 
   const handleDownload = () => {
     if (!latestPhoto) return;
@@ -22,17 +34,31 @@ export const BoothGallery = ({
     document.body.removeChild(a);
   };
 
+  const maxWidthClass = aspectRatio
+    ? aspectRatio < 0.5
+      ? 'max-w-xs sm:max-w-sm'
+      : aspectRatio < 1
+      ? 'max-w-md'
+      : 'max-w-2xl'
+    : 'max-w-2xl';
+
   return (
     <div className="w-full flex flex-col items-center animate-fade-in">
       <h2 className="text-2xl font-bold mb-6 text-gray-800 flex items-center gap-2">
         <ImageIcon /> Photo Gallery
       </h2>
       
-      <div className="w-full max-w-3xl max-h-[60vh] h-80 sm:h-96 bg-gray-100 rounded-2xl border-4 border-white shadow-lg overflow-hidden relative mb-6 flex items-center justify-center p-2">
+      <div className={`w-full ${maxWidthClass} mb-6 flex flex-col items-center`}>
         {latestPhoto ? (
-          <img src={latestPhoto} alt="Captured" className="w-full h-full object-contain" />
+          <img 
+            src={latestPhoto} 
+            alt="Captured photobooth print" 
+            className="w-full h-auto rounded-2xl shadow-2xl block border border-neutral-800" 
+          />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-gray-400">No photos yet!</div>
+          <div className="w-full h-64 flex items-center justify-center text-gray-400 bg-neutral-900 rounded-2xl border border-neutral-800">
+            No photos yet!
+          </div>
         )}
       </div>
 

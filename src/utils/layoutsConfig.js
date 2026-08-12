@@ -287,61 +287,53 @@ export const drawTextSectionToCanvas = (ctx, section, canvasW, canvasH, titleTex
   const centerY = sy + sh / 2;
 
   if (section.type === 'horizontal_bar') {
-    // Left: Date, Middle: Script Title, Right: Logo
-    const fontScale = Math.min(sw, sh) * 0.35;
+    const fontScale = Math.min(sw, sh) * 0.25;
 
-    // Left Date
-    ctx.font = `600 ${fontScale * 0.8}px "M PLUS Rounded 1c", sans-serif`;
+    ctx.font = `600 ${fontScale * 0.85}px "M PLUS Rounded 1c", sans-serif`;
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'left';
     ctx.fillText(dateText, sx + sw * 0.05, centerY);
 
-    // Middle Title
-    ctx.font = `italic 700 ${fontScale * 1.2}px "Great Vibes", "Caveat", "Dancing Script", "Brush Script MT", cursive`;
+    ctx.font = `italic 700 ${fontScale * 1.35}px "Great Vibes", "Caveat", "Dancing Script", "Brush Script MT", cursive`;
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.fillText(titleText, centerX, centerY);
 
-    // Right Logo
-    ctx.font = `800 ${fontScale * 0.7}px "M PLUS Rounded 1c", sans-serif`;
+    ctx.font = `800 ${fontScale * 0.75}px "M PLUS Rounded 1c", sans-serif`;
     ctx.fillStyle = '#ff99c8';
     ctx.textAlign = 'right';
     ctx.fillText('✨ PURI-PURI BOOTH ✨', sx + sw * 0.95, centerY);
 
   } else if (section.type === 'title_date') {
-    const fontScale = Math.min(sw, sh) * 0.35;
-    ctx.font = `italic 700 ${fontScale * 1.3}px "Great Vibes", "Caveat", "Dancing Script", "Brush Script MT", cursive`;
+    const fontScale = Math.min(sw, sh) * 0.28;
+    ctx.font = `italic 700 ${fontScale * 1.0}px "Great Vibes", "Caveat", "Dancing Script", "Brush Script MT", cursive`;
     ctx.fillStyle = '#ffffff';
     ctx.fillText(titleText, centerX, centerY - sh * 0.15);
 
-    ctx.font = `600 ${fontScale * 0.65}px "M PLUS Rounded 1c", sans-serif`;
+    ctx.font = `600 ${fontScale * 0.5}px "M PLUS Rounded 1c", sans-serif`;
     ctx.fillStyle = '#d1d5db';
     ctx.fillText(dateText, centerX, centerY + sh * 0.25);
 
   } else if (section.type === 'logo_only') {
-    const fontScale = Math.min(sw, sh) * 0.45;
+    const fontScale = Math.min(sw, sh) * 0.35;
     ctx.font = `800 ${fontScale}px "M PLUS Rounded 1c", sans-serif`;
     ctx.fillStyle = '#ff99c8';
     ctx.fillText('✨ PURI-PURI BOOTH ✨', centerX, centerY);
 
   } else {
-    // Full section (Layout E, G, H, I, J text sections)
-    const fontScale = Math.min(sw, sh) * 0.18;
+    const fontScale = Math.min(sw, sh) * 0.12;
 
-    // Main Script Title
-    ctx.font = `italic 700 ${fontScale * 2.2}px "Great Vibes", "Caveat", "Dancing Script", "Brush Script MT", cursive`;
+    ctx.font = `italic 700 ${fontScale * 1.4}px "Great Vibes", "Caveat", "Dancing Script", "Brush Script MT", cursive`;
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(titleText, centerX, centerY - sh * 0.15);
+    ctx.fillText(titleText, centerX, centerY - sh * 0.22);
 
-    // Date
-    ctx.font = `600 ${fontScale * 1.1}px "M PLUS Rounded 1c", sans-serif`;
+    ctx.font = `600 ${fontScale * 0.7}px "M PLUS Rounded 1c", sans-serif`;
     ctx.fillStyle = '#e5e7eb';
-    ctx.fillText(dateText, centerX, centerY + sh * 0.15);
+    ctx.fillText(dateText, centerX, centerY + sh * 0.08);
 
-    // Logo badge
-    ctx.font = `800 ${fontScale * 0.9}px "M PLUS Rounded 1c", sans-serif`;
+    ctx.font = `800 ${fontScale * 0.65}px "M PLUS Rounded 1c", sans-serif`;
     ctx.fillStyle = '#ff99c8';
-    ctx.fillText('✨ PURI-PURI BOOTH ✨', centerX, centerY + sh * 0.35);
+    ctx.fillText('✨ PURI-PURI BOOTH ✨', centerX, centerY + sh * 0.30);
   }
 
   ctx.restore();
@@ -367,16 +359,23 @@ const loadImage = (src) => {
 
 /**
  * Compiles a complete photobooth print canvas for the specified layout and captured pose pairs.
- * Each photo box gets host image on left half and guest image on right half (0 gap!).
  */
 export const compileLayoutCanvas = async ({
   layoutId,
-  poseImages = [], // Array of { host: dataUrl/canvas/img, guest: dataUrl/canvas/img }
+  poseImages = [],
   customTitle = 'Groom & Bride',
   customDate = 'DD/MM/YY',
   cameraFilter = 'none',
   backgroundColor = '#111111',
 }) => {
+  if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+    try {
+      await document.fonts.ready;
+    } catch (err) {
+      void err;
+    }
+  }
+
   const layout = getLayoutById(layoutId);
   const canvas = document.createElement('canvas');
   canvas.width = layout.canvasWidth;
@@ -386,11 +385,9 @@ export const compileLayoutCanvas = async ({
   const cw = canvas.width;
   const ch = canvas.height;
 
-  // Background card color (black card stock)
   ctx.fillStyle = backgroundColor;
   ctx.fillRect(0, 0, cw, ch);
 
-  // Preload all pose images safely
   const loadedPoses = await Promise.all(
     poseImages.map(async (pose) => ({
       host: await loadImage(pose?.host),
@@ -398,26 +395,17 @@ export const compileLayoutCanvas = async ({
     }))
   );
 
-  // Render photo boxes
   layout.boxes.forEach((box) => {
     const bx = (box.x / 100) * cw;
     const by = (box.y / 100) * ch;
     const bw = (box.w / 100) * cw;
     const bh = (box.h / 100) * ch;
 
-    // Draw white photo frame box
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.rect(bx, by, bw, bh);
-    ctx.fill();
+    const ix = bx;
+    const iy = by;
+    const iw = bw;
+    const ih = bh;
 
-    const borderWidth = Math.max(4, Math.min(bw, bh) * 0.03);
-    const ix = bx + borderWidth;
-    const iy = by + borderWidth;
-    const iw = bw - borderWidth * 2;
-    const ih = bh - borderWidth * 2;
-
-    // Imperial Requirement: Left half = Person 1 (Host), Right half = Person 2 (Guest) with 0 gap!
     const halfWidth = iw / 2;
     const leftRect = { x: ix, y: iy, w: halfWidth, h: ih };
     const rightRect = { x: ix + halfWidth, y: iy, w: halfWidth, h: ih };

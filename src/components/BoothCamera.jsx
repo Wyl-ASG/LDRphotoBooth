@@ -7,6 +7,7 @@ import { LayoutPickerModal } from './LayoutPicker';
 
 export const BoothCamera = ({
   countdown,
+  isTakingPhotos = false,
   currentPoseIndex = 0,
   totalPoses = 1,
   flash,
@@ -30,6 +31,7 @@ export const BoothCamera = ({
 }) => {
   const [isLayoutPickerOpen, setIsLayoutPickerOpen] = useState(false);
   const layout = getLayoutById(layoutStyle);
+  const isBusy = countdown !== null || isTakingPhotos;
 
   useEffect(() => {
     if (localVideoRef?.current && localStream && localVideoRef.current.srcObject !== localStream) {
@@ -71,7 +73,8 @@ export const BoothCamera = ({
         {/* Layout Picker Trigger */}
         <button
           onClick={() => setIsLayoutPickerOpen(true)}
-          className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-2xl shadow-sm border-2 border-pink-200 hover:border-pink-400 hover:bg-pink-50 transition-all font-bold text-gray-700"
+          disabled={isBusy}
+          className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-2xl shadow-sm border-2 border-pink-200 hover:border-pink-400 hover:bg-pink-50 transition-all font-bold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-pink-200 disabled:hover:bg-white"
         >
           <LayoutGrid size={20} className="text-pink-500" />
           <span>Layout: <strong className="text-pink-600 font-extrabold">{layout.name}</strong> ({layout.poses} {layout.poses === 1 ? 'Pose' : 'Poses'})</span>
@@ -83,7 +86,8 @@ export const BoothCamera = ({
           <select
             value={cameraFilter}
             onChange={(e) => onFilterChange(e.target.value)}
-            className="bg-transparent text-gray-700 font-bold outline-none cursor-pointer"
+            disabled={isBusy}
+            className="bg-transparent text-gray-700 font-bold outline-none cursor-pointer disabled:cursor-not-allowed"
           >
             {BOOTH_PROTOCOL.filters.map((filter) => (
               <option key={filter.value} value={filter.value}>
@@ -95,156 +99,151 @@ export const BoothCamera = ({
       </div>
 
       {/* Main Interactive Print Stage */}
-      <div className={`relative w-full ${layout.type === 'strip' ? 'max-w-xs sm:max-w-sm' : layout.type === '4R-portrait' ? 'max-w-md' : 'max-w-2xl'} bg-neutral-900 rounded-3xl p-4 sm:p-6 border-8 border-white mb-6 shadow-2xl overflow-hidden flex flex-col items-center`}>
-        {/* Print card outer wrapper matching active layout aspect ratio */}
-        <div
-          className="w-full relative bg-neutral-950 rounded-2xl p-3 shadow-inner overflow-hidden border border-neutral-800"
-          style={{
-            aspectRatio: layout.type === 'strip' ? '1/3' : layout.type === '4R-portrait' ? '2/3' : '3/2',
-          }}
-        >
-          {/* Render headers */}
-          {(layout.headers || []).map((header, idx) => (
+      <div
+        className={`w-full relative ${layout.type === 'strip' ? 'max-w-xs sm:max-w-sm' : layout.type === '4R-portrait' ? 'max-w-md' : 'max-w-2xl'} bg-neutral-950 rounded-2xl p-3 shadow-2xl overflow-hidden border border-neutral-800 mb-6`}
+        style={{
+          aspectRatio: layout.type === 'strip' ? '1/3' : layout.type === '4R-portrait' ? '2/3' : '3/2',
+        }}
+      >
+        {/* Render headers */}
+        {(layout.headers || []).map((header, idx) => (
+          <div
+            key={`header-${idx}`}
+            className="absolute z-10 flex flex-col items-center justify-center text-center p-1 overflow-hidden"
+            style={{
+              left: `${header.x}%`,
+              top: `${header.y}%`,
+              width: `${header.w}%`,
+              height: `${header.h}%`,
+            }}
+          >
+            <span className="italic font-bold text-white text-lg sm:text-2xl drop-shadow" style={{ fontFamily: "'Great Vibes', cursive" }}>
+              {customTitle || 'Groom & Bride'}
+            </span>
+            <span className="text-xs sm:text-sm font-semibold text-gray-300">
+              {customDate || 'DD/MM/YY'}
+            </span>
+          </div>
+        ))}
+
+        {/* Render photo boxes */}
+        {layout.boxes.map((box, idx) => {
+          const isCurrentActiveBox = currentPoseIndex === box.poseIndex;
+          const captured = capturedPoses[box.poseIndex];
+
+          return (
             <div
-              key={`header-${idx}`}
-              className="absolute z-10 flex flex-col items-center justify-center text-center p-1 overflow-hidden"
+              key={`box-${idx}`}
+              className={`absolute bg-neutral-900 rounded-xl overflow-hidden flex transition-all ${
+                isCurrentActiveBox && countdown !== null ? 'ring-4 ring-pink-400 scale-[1.01]' : ''
+              }`}
               style={{
-                left: `${header.x}%`,
-                top: `${header.y}%`,
-                width: `${header.w}%`,
-                height: `${header.h}%`,
+                left: `${box.x}%`,
+                top: `${box.y}%`,
+                width: `${box.w}%`,
+                height: `${box.h}%`,
               }}
             >
-              <span className="font-serif italic font-bold text-white text-base sm:text-2xl drop-shadow">
-                {customTitle || 'Groom & Bride'}
-              </span>
-              <span className="text-xs sm:text-sm font-semibold text-gray-300">
-                {customDate || 'DD/MM/YY'}
-              </span>
-            </div>
-          ))}
-
-          {/* Render photo boxes (Each containing Person 1 left half & Person 2 right half with 0 gap!) */}
-          {layout.boxes.map((box, idx) => {
-            const isCurrentActiveBox = currentPoseIndex === box.poseIndex;
-            const captured = capturedPoses[box.poseIndex];
-
-            return (
-              <div
-                key={`box-${idx}`}
-                className={`absolute bg-white rounded-xl p-1 shadow-md overflow-hidden flex transition-all ${
-                  isCurrentActiveBox && countdown !== null ? 'ring-4 ring-pink-400 scale-[1.01]' : ''
-                }`}
-                style={{
-                  left: `${box.x}%`,
-                  top: `${box.y}%`,
-                  width: `${box.w}%`,
-                  height: `${box.h}%`,
-                }}
-              >
-                {/* Person 1 (Host) - Left 50% width (0 gap) */}
-                <div className="w-1/2 h-full relative overflow-hidden bg-pink-100 border-r border-white/20">
-                  {captured?.host ? (
-                    <img
-                      src={captured.host}
-                      alt="Host captured"
-                      className="w-full h-full object-cover"
-                      style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }}
-                    />
-                  ) : (
-                    <video
-                      ref={(el) => {
-                        if (el && video1Stream && el.srcObject !== video1Stream) {
-                          el.srcObject = video1Stream;
-                          el.play().catch(() => {});
-                        }
-                      }}
-                      autoPlay
-                      playsInline
-                      muted
-                      style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }}
-                      className="w-full h-full object-cover"
-                    />
-                  )}
-                  <span className="absolute bottom-1 left-1 bg-black/40 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md backdrop-blur-xs">
-                    You
-                  </span>
-                </div>
-
-                {/* Person 2 (Guest) - Right 50% width (0 gap!) */}
-                <div className="w-1/2 h-full relative overflow-hidden bg-pink-100">
-                  {captured?.guest ? (
-                    <img
-                      src={captured.guest}
-                      alt="Guest captured"
-                      className="w-full h-full object-cover"
-                      style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }}
-                    />
-                  ) : (
-                    <video
-                      ref={(el) => {
-                        if (el && video2Stream && el.srcObject !== video2Stream) {
-                          el.srcObject = video2Stream;
-                          el.play().catch(() => {});
-                        }
-                      }}
-                      autoPlay
-                      playsInline
-                      muted
-                      style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }}
-                      className="w-full h-full object-cover"
-                    />
-                  )}
-                  <span className="absolute bottom-1 right-1 bg-black/40 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md backdrop-blur-xs">
-                    Friend
-                  </span>
-                </div>
+              <div className="w-1/2 h-full relative overflow-hidden bg-pink-100 border-r border-white/20">
+                {captured?.host ? (
+                  <img
+                    src={captured.host}
+                    alt="Host captured"
+                    className="w-full h-full object-cover"
+                    style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }}
+                  />
+                ) : (
+                  <video
+                    ref={(el) => {
+                      if (el && video1Stream && el.srcObject !== video1Stream) {
+                        el.srcObject = video1Stream;
+                        el.play().catch(() => {});
+                      }
+                    }}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }}
+                    className="w-full h-full object-cover"
+                  />
+                )}
+                <span className="absolute bottom-1 left-1 bg-black/40 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md backdrop-blur-xs">
+                  You
+                </span>
               </div>
-            );
-          })}
 
-          {/* Render footers */}
-          {(layout.footers || []).map((footer, idx) => (
-            <div
-              key={`footer-${idx}`}
-              className="absolute z-10 flex flex-col items-center justify-center text-center p-1 overflow-hidden"
-              style={{
-                left: `${footer.x}%`,
-                top: `${footer.y}%`,
-                width: `${footer.w}%`,
-                height: `${footer.h}%`,
-              }}
-            >
-              {footer.type === 'logo_only' ? (
-                <span className="font-black text-pink-300 text-xs sm:text-sm tracking-wider">
+              <div className="w-1/2 h-full relative overflow-hidden bg-pink-100">
+                {captured?.guest ? (
+                  <img
+                    src={captured.guest}
+                    alt="Guest captured"
+                    className="w-full h-full object-cover"
+                    style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }}
+                  />
+                ) : (
+                  <video
+                    ref={(el) => {
+                      if (el && video2Stream && el.srcObject !== video2Stream) {
+                        el.srcObject = video2Stream;
+                        el.play().catch(() => {});
+                      }
+                    }}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }}
+                    className="w-full h-full object-cover"
+                  />
+                )}
+                <span className="absolute bottom-1 right-1 bg-black/40 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md backdrop-blur-xs">
+                  Friend
+                </span>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Render footers */}
+        {(layout.footers || []).map((footer, idx) => (
+          <div
+            key={`footer-${idx}`}
+            className="absolute z-10 flex flex-col items-center justify-center text-center p-1 overflow-hidden"
+            style={{
+              left: `${footer.x}%`,
+              top: `${footer.y}%`,
+              width: `${footer.w}%`,
+              height: `${footer.h}%`,
+            }}
+          >
+            {footer.type === 'logo_only' ? (
+              <span className="font-black text-pink-300 text-xs sm:text-sm tracking-wider">
+                ✨ PURI-PURI BOOTH ✨
+              </span>
+            ) : footer.type === 'horizontal_bar' ? (
+              <div className="w-full flex items-center justify-between px-2 text-white">
+                <span className="text-xs font-bold text-gray-300">{customDate || 'DD/MM/YY'}</span>
+                <span className="italic font-bold text-base sm:text-xl" style={{ fontFamily: "'Great Vibes', cursive" }}>{customTitle || 'Groom & Bride'}</span>
+                <span className="text-xs font-black text-pink-300">✨ PURI-PURI BOOTH ✨</span>
+              </div>
+            ) : (
+              <>
+                <span className="italic font-bold text-white text-lg sm:text-2xl drop-shadow mb-0.5" style={{ fontFamily: "'Great Vibes', cursive" }}>
+                  {customTitle || 'Groom & Bride'}
+                </span>
+                <span className="text-xs sm:text-sm font-semibold text-gray-300 mb-1">
+                  {customDate || 'DD/MM/YY'}
+                </span>
+                <span className="font-black text-pink-300 text-xs tracking-wider">
                   ✨ PURI-PURI BOOTH ✨
                 </span>
-              ) : footer.type === 'horizontal_bar' ? (
-                <div className="w-full flex items-center justify-between px-2 text-white">
-                  <span className="text-xs font-bold text-gray-300">{customDate || 'DD/MM/YY'}</span>
-                  <span className="font-serif italic font-bold text-sm sm:text-lg">{customTitle || 'Groom & Bride'}</span>
-                  <span className="text-xs font-black text-pink-300">✨ PURI-PURI BOOTH ✨</span>
-                </div>
-              ) : (
-                <>
-                  <span className="font-serif italic font-bold text-white text-base sm:text-2xl drop-shadow">
-                    {customTitle || 'Groom & Bride'}
-                  </span>
-                  <span className="text-xs sm:text-sm font-semibold text-gray-300 mb-1">
-                    {customDate || 'DD/MM/YY'}
-                  </span>
-                  <span className="font-black text-pink-300 text-xs tracking-wider">
-                    ✨ PURI-PURI BOOTH ✨
-                  </span>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
+              </>
+            )}
+          </div>
+        ))}
 
         {/* Live Countdown & Session Overlay */}
         {countdown !== null && (
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-xs flex flex-col items-center justify-center z-30 rounded-3xl">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-xs flex flex-col items-center justify-center z-30 rounded-2xl">
             <div className="bg-pink-500 text-white px-6 py-2 rounded-full font-black text-lg mb-4 shadow-lg flex items-center gap-2 animate-bounce">
               <Sparkles size={20} /> Pose {currentPoseIndex + 1} of {totalPoses} <Sparkles size={20} />
             </div>
@@ -255,7 +254,7 @@ export const BoothCamera = ({
         )}
 
         {/* Camera Flash Overlay */}
-        {flash && <div className="absolute inset-0 bg-white z-40 animate-pulse rounded-3xl" />}
+        {flash && <div className="absolute inset-0 bg-white z-40 animate-pulse rounded-2xl" />}
       </div>
 
       {/* Bottom Action Controls */}
@@ -263,16 +262,16 @@ export const BoothCamera = ({
         <Button
           icon={Camera}
           onClick={triggerSyncCountdown}
-          disabled={countdown !== null}
+          disabled={isBusy}
           className="px-10 py-4 text-lg"
         >
-          {countdown !== null
+          {isBusy
             ? `Taking Pose ${currentPoseIndex + 1} of ${layout.poses}...`
             : `Start Session (${layout.poses} ${layout.poses === 1 ? 'Pose' : 'Poses'})`}
         </Button>
 
         {hasPhotos && (
-          <Button icon={ImageIcon} variant="secondary" onClick={onGoToGallery}>
+          <Button icon={ImageIcon} variant="secondary" onClick={onGoToGallery} disabled={isBusy}>
             Gallery
           </Button>
         )}
