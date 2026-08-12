@@ -59,8 +59,8 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
     });
   }, [setErrorMsg]); 
 
-  const startHostSession = async (onReady) => {
-    setErrorMsg('');
+  const startHostSession = async (onReady, keepError = false) => {
+    if (!keepError) setErrorMsg('');
     const stream = await startCamera();
     if (!stream) return false;
 

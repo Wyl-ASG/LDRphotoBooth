@@ -130,14 +130,14 @@ export const useBoothController = () => {
     latestStateRef.current = { layoutStyle, cameraFilter, role, customTitle, customDate };
   }, [layoutStyle, cameraFilter, role, customTitle, customDate]);
 
-  const handleStartHostDirect = useCallback(() => {
-    setErrorMsg('');
+  const handleStartHostDirect = useCallback((keepError = false) => {
+    if (!keepError) setErrorMsg('');
     setAppState('HOST_WAITING');
-    startHostSession(() => setAppState('BOOTH'));
+    startHostSession(() => setAppState('BOOTH'), keepError);
   }, [startHostSession]);
 
   const { googleToken, handleGoogleLogin } = useGoogleAuth(GOOGLE_CLIENT_ID, setErrorMsg, () => {
-    handleStartHostDirect();
+    handleStartHostDirect(true);
   });
 
   useEffect(() => {
@@ -401,6 +401,7 @@ export const useBoothController = () => {
   return {
     appState,
     errorMsg,
+    setErrorMsg,
     joinIdInput,
     setJoinIdInput,
     photos,

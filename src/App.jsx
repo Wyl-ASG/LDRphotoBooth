@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, Users, Save, Loader2, Sparkles, Copy, Heart, RefreshCcw, XCircle, Star } from 'lucide-react';
+import { Camera, Users, Save, Loader2, Sparkles, Copy, Heart, RefreshCcw, XCircle, Star, X } from 'lucide-react';
 
 import { Button } from './components/Button';
 import { BoothCamera } from './components/BoothCamera';
@@ -11,6 +11,7 @@ export default function App() {
   const {
     appState,
     errorMsg,
+    setErrorMsg,
     joinIdInput,
     setJoinIdInput,
     photos,
@@ -37,7 +38,6 @@ export default function App() {
     remoteStream,
     handleStartHostDirect,
     handleStartHostWithGoogle,
-    handleGoogleLogin,
     handleGoToGallery,
     handleOpenRoleSelect,
     handleGoHome,
@@ -88,16 +88,25 @@ export default function App() {
         </div>
 
         {errorMsg && (
-          <div className="bg-red-100 border-l-8 border-red-500 p-4 m-6 rounded-r-xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-md">
+          <div className="bg-amber-100 border-l-8 border-amber-500 p-4 m-6 rounded-r-xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-md transition-all">
             <div className="flex items-center gap-3">
-              <XCircle className="text-red-500 shrink-0" size={28} />
-              <p className="text-red-700 font-bold text-lg">{errorMsg}</p>
+              <XCircle className="text-amber-600 shrink-0" size={28} />
+              <p className="text-amber-900 font-bold text-lg">{errorMsg}</p>
             </div>
-            {appState === 'LANDING' && (
-              <Button icon={Camera} onClick={handleStartHostDirect} className="text-sm py-2 px-4 whitespace-nowrap shrink-0">
-                Host Without Google
-              </Button>
-            )}
+            <div className="flex items-center gap-2 shrink-0">
+              {appState === 'LANDING' && (
+                <Button icon={Camera} onClick={handleStartHostDirect} className="text-sm py-2 px-4 whitespace-nowrap">
+                  Host Without Google
+                </Button>
+              )}
+              <button
+                onClick={() => setErrorMsg('')}
+                className="text-amber-700 hover:text-amber-900 p-1.5 rounded-xl hover:bg-amber-200 transition-colors"
+                title="Dismiss notification"
+              >
+                <X size={20} />
+              </button>
+            </div>
           </div>
         )}
 
@@ -110,7 +119,9 @@ export default function App() {
               <h2 className="text-4xl brand-font text-pink-500">Let's take a photo!</h2>
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center flex-wrap">
                 <Button icon={Camera} onClick={handleStartHostDirect}>Start (Host)</Button>
-                <Button icon={Save} variant="secondary" onClick={handleStartHostWithGoogle}>Host + Google Drive</Button>
+                <Button icon={Save} variant="secondary" onClick={handleStartHostWithGoogle}>
+                  Host + Google Drive <span className="text-xs opacity-75 font-normal ml-1">(Testing)</span>
+                </Button>
                 <Button icon={Users} variant="secondary" onClick={handleOpenRoleSelect}>Join Friend</Button>
               </div>
             </div>
