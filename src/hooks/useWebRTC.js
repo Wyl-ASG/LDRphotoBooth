@@ -35,6 +35,10 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
   };
 
   const setupDataChannel = useCallback((conn) => {
+    conn.on('open', () => {
+      setIsConnected(true);
+    });
+
     conn.on('data', (data) => {
       if (onDataMessageRef.current) {
         onDataMessageRef.current(data);
@@ -43,9 +47,17 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
       }
     });
 
-    conn.on('error', (err) => console.error('❌ [WebRTC Data Error]', err));
-    conn.on('close', () => console.warn('⚠️ [WebRTC Data Closed]'));
-  }, []); 
+    conn.on('error', (err) => {
+      console.error('❌ [WebRTC Data Error]', err);
+      setErrorMsg(`Data connection error: ${err.message || err}`);
+    });
+
+    conn.on('close', () => {
+      console.warn('⚠️ [WebRTC Data Closed]');
+      setIsConnected(false);
+      setErrorMsg('Friend disconnected.');
+    });
+  }, [setErrorMsg]); 
 
   const startHostSession = async (onReady) => {
     setErrorMsg('');
@@ -123,8 +135,23 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
   };
 
   const cleanupWebRTC = useCallback(() => {
-    if (localStreamRef.current) localStreamRef.current.getTracks().forEach(track => track.stop());
-    if (peerRef.current) peerRef.current.destroy();
+    if (connRef.current) {
+      try { connRef.current.close(); } catch { /* ignore */ }
+      connRef.current = null;
+    }
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+    }
+    if (peerRef.current) {
+      try { peerRef.current.destroy(); } catch { /* ignore */ }
+      peerRef.current = null;
+    }
+    setLocalStream(null);
+    setRemoteStream(null);
+    setIsConnected(false);
+    setRole(null);
+    setPeerId('');
   }, []);
 
   return {

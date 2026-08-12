@@ -2,16 +2,16 @@ import React, { useRef, useEffect, useState } from 'react';
 import { CheckCircle } from 'lucide-react';
 import { Button } from './Button';
 
-const STAMPS = ['🐱', '🐰', '🎀', '✨', '💖', '👑', '😎', '⭐'];
+const STAMPS = ['🐱', '🐰', '🎀', '✨', '💖', '👑', '😎', '⭐', '🌸', '🧸', '💌', '🎉'];
 
-export const BoothDecorate = ({ 
-  basePhotoUrl, 
-  stickers, 
-  onAddSticker, 
-  onUpdateSticker, 
+export const BoothDecorate = ({
+  basePhotoUrl,
+  stickers,
+  onAddSticker,
+  onUpdateSticker,
   onFinish,
   isFinishing,
-  onInitiateFinish
+  onInitiateFinish,
 }) => {
   const canvasRef = useRef(null);
   const [dragState, setDragState] = useState({ id: null, x: 0, y: 0 });
@@ -24,11 +24,16 @@ export const BoothDecorate = ({
     dragStateRef.current = dragState;
   }, [dragState]);
 
-  /* Load the background photo into an offscreen image before drawing the canvas. */
+  /* Load the background photo and adjust canvas resolution to native print dimensions */
   useEffect(() => {
+    if (!basePhotoUrl) return;
     const img = new Image();
     img.onload = () => {
       setBgImg(img);
+      if (canvasRef.current) {
+        canvasRef.current.width = img.naturalWidth || 1800;
+        canvasRef.current.height = img.naturalHeight || 1200;
+      }
     };
     img.src = basePhotoUrl;
 
@@ -42,19 +47,19 @@ export const BoothDecorate = ({
     if (!bgImg || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
-    
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
 
-    stickers.forEach(sticker => {
+    stickers.forEach((sticker) => {
       ctx.font = `${sticker.size}px Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      
+
       const isDraggingThis = dragState.id === sticker.id;
       const drawX = isDraggingThis ? dragState.x : sticker.x;
       const drawY = isDraggingThis ? dragState.y : sticker.y;
-      
+
       ctx.fillText(sticker.emoji, drawX, drawY);
     });
   }, [bgImg, stickers, dragState]);
@@ -62,7 +67,7 @@ export const BoothDecorate = ({
   /* Export the final decorated image once the finish signal arrives. */
   useEffect(() => {
     if (isFinishing && canvasRef.current) {
-      const finalDataUrl = canvasRef.current.toDataURL('image/jpeg', 0.85);
+      const finalDataUrl = canvasRef.current.toDataURL('image/jpeg', 0.9);
       onFinish(finalDataUrl);
     }
   }, [isFinishing, onFinish]);
@@ -74,7 +79,7 @@ export const BoothDecorate = ({
     const rect = canvasRef.current.getBoundingClientRect();
     const scaleX = canvasRef.current.width / rect.width;
     const scaleY = canvasRef.current.height / rect.height;
-    
+
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
@@ -94,7 +99,7 @@ export const BoothDecorate = ({
     const rect = canvasRef.current.getBoundingClientRect();
     const scaleX = canvasRef.current.width / rect.width;
     const scaleY = canvasRef.current.height / rect.height;
-    
+
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
@@ -108,7 +113,6 @@ export const BoothDecorate = ({
     }
 
     const now = Date.now();
-    // Limit sync traffic while dragging so peers stay responsive.
     if (now - lastSyncRef.current > 50) {
       onUpdateSticker(dragStateRef.current.id, { x, y });
       lastSyncRef.current = now;
@@ -140,15 +144,16 @@ export const BoothDecorate = ({
     };
   }, []);
 
-  /* Render the sticker palette and the decoration canvas. */
+  const aspectRatio = bgImg ? bgImg.naturalWidth / bgImg.naturalHeight : 1.5;
+
   return (
     <div className="w-full flex flex-col items-center animate-fade-in">
       <h2 className="text-2xl font-bold mb-4 text-gray-800">✨ Decorate Time! ✨</h2>
-      
+
       <div className="flex flex-wrap justify-center gap-2 mb-4 bg-white p-3 rounded-2xl shadow-sm border-2 border-pink-100">
         <span className="text-sm font-bold text-gray-400 self-center mr-2 uppercase tracking-wide">Stamps</span>
-        {STAMPS.map(emoji => (
-          <button 
+        {STAMPS.map((emoji) => (
+          <button
             key={emoji}
             onClick={() => onAddSticker(emoji)}
             className="text-3xl hover:scale-125 transition-transform active:scale-95 bg-pink-50 p-2 rounded-xl"
@@ -158,16 +163,17 @@ export const BoothDecorate = ({
         ))}
       </div>
 
-      <div className="w-full max-w-3xl aspect-[4/3] bg-gray-100 rounded-2xl border-4 border-white shadow-lg overflow-hidden relative mb-6 cursor-crosshair">
-        <canvas 
-          ref={canvasRef} 
-          width={1280} 
-          height={960}
+      <div
+        className={`w-full ${aspectRatio < 0.5 ? 'max-w-xs sm:max-w-sm' : aspectRatio < 1 ? 'max-w-md' : 'max-w-3xl'} bg-neutral-900 rounded-2xl border-4 border-white shadow-lg overflow-hidden relative mb-6 cursor-crosshair flex items-center justify-center`}
+        style={{ aspectRatio }}
+      >
+        <canvas
+          ref={canvasRef}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
-          className="w-full h-full object-contain touch-none" 
+          className="w-full h-full block touch-none"
         />
       </div>
 

@@ -1,73 +1,90 @@
-import React, { useEffect, useRef } from 'react';
-import { Camera, Image as ImageIcon, Columns, Rows, PictureInPicture, Wand2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Camera, Image as ImageIcon, Wand2, LayoutGrid, Sparkles } from 'lucide-react';
 import { Button } from './Button';
 import { BOOTH_PROTOCOL } from '../utils/boothProtocol';
+import { getLayoutById } from '../utils/layoutsConfig';
+import { LayoutPickerModal } from './LayoutPicker';
 
-export const BoothCamera = ({ 
-  countdown, 
-  flash, 
-  triggerSyncCountdown, 
-  hasPhotos, 
+export const BoothCamera = ({
+  countdown,
+  currentPoseIndex = 0,
+  totalPoses = 1,
+  flash,
+  triggerSyncCountdown,
+  hasPhotos,
   onGoToGallery,
   layoutStyle,
   onLayoutChange,
   cameraFilter,
   onFilterChange,
+  customTitle,
+  onTitleChange,
+  customDate,
+  onDateChange,
   localStream,
   remoteStream,
-  role
+  role,
+  localVideoRef,
+  remoteVideoRef,
+  capturedPoses = [],
 }) => {
-  // Keep display refs separate so each stream stays attached to the right video element.
-  const displayLocalVideoRef = useRef(null);
-  const displayRemoteVideoRef = useRef(null);
+  const [isLayoutPickerOpen, setIsLayoutPickerOpen] = useState(false);
+  const layout = getLayoutById(layoutStyle);
 
   useEffect(() => {
-    if (displayLocalVideoRef.current && localStream) displayLocalVideoRef.current.srcObject = localStream;
-    if (displayRemoteVideoRef.current && remoteStream) displayRemoteVideoRef.current.srcObject = remoteStream;
-  }, [localStream, remoteStream]);
+    if (localVideoRef?.current && localStream && localVideoRef.current.srcObject !== localStream) {
+      localVideoRef.current.srcObject = localStream;
+      localVideoRef.current.play().catch((err) => console.warn('Local video play failed:', err));
+    }
+    if (remoteVideoRef?.current && remoteStream && remoteVideoRef.current.srcObject !== remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+      remoteVideoRef.current.play().catch((err) => console.warn('Remote video play failed:', err));
+    }
+  }, [localStream, remoteStream, localVideoRef, remoteVideoRef, layoutStyle]);
 
   const getFilterStyle = () => {
     switch (cameraFilter) {
-      case 'kawaii': return 'brightness(1.15) saturate(1.3) contrast(1.05) sepia(0.2) hue-rotate(-5deg)';
-      case 'vintage': return 'sepia(0.7) contrast(1.1) brightness(0.9)';
-      case 'bnw': return 'grayscale(1) contrast(1.2)';
-      default: return 'none';
+      case 'kawaii':
+        return 'brightness(1.15) saturate(1.3) contrast(1.05) sepia(0.2) hue-rotate(-5deg)';
+      case 'vintage':
+        return 'sepia(0.7) contrast(1.1) brightness(0.9)';
+      case 'bnw':
+        return 'grayscale(1) contrast(1.2)';
+      default:
+        return 'none';
     }
   };
 
-  const video1 = role === 'host' ? displayLocalVideoRef : displayRemoteVideoRef;
-  const video2 = role === 'guest' ? displayLocalVideoRef : displayRemoteVideoRef;
-  const activeLayoutButtonClass = 'bg-pink-100 text-pink-600';
-  const inactiveLayoutButtonClass = 'text-gray-400 hover:bg-gray-50';
+  const video1Stream = role === 'host' ? localStream : remoteStream;
+  const video2Stream = role === 'guest' ? localStream : remoteStream;
 
   return (
     <div className="flex flex-col items-center w-full relative animate-fade-in">
-      
-      <div className="flex flex-wrap justify-center gap-4 mb-4">
-        <div className="flex gap-2 bg-white p-2 rounded-xl shadow-sm border border-pink-200">
-          {BOOTH_PROTOCOL.layouts.map((layout) => {
-            const Icon = layout.value === 'split-horizontal'
-              ? Columns
-              : layout.value === 'split-vertical'
-                ? Rows
-                : PictureInPicture;
+      {/* Hidden persistent video elements to ensure stream capture is never interrupted */}
+      <div className="hidden" aria-hidden="true">
+        <video ref={localVideoRef} autoPlay playsInline muted />
+        <video ref={remoteVideoRef} autoPlay playsInline muted />
+      </div>
 
-            return (
-              <button
-                key={layout.value}
-                onClick={() => onLayoutChange(layout.value)}
-                className={`p-2 rounded-lg transition-colors ${layoutStyle === layout.value ? activeLayoutButtonClass : inactiveLayoutButtonClass}`}
-                aria-label={layout.label}
-              >
-                <Icon size={20} />
-              </button>
-            );
-          })}
-        </div>
+      {/* Top Toolbar */}
+      <div className="flex flex-wrap justify-center items-center gap-3 mb-6 w-full max-w-3xl">
+        {/* Layout Picker Trigger */}
+        <button
+          onClick={() => setIsLayoutPickerOpen(true)}
+          className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-2xl shadow-sm border-2 border-pink-200 hover:border-pink-400 hover:bg-pink-50 transition-all font-bold text-gray-700"
+        >
+          <LayoutGrid size={20} className="text-pink-500" />
+          <span>Layout: <strong className="text-pink-600 font-extrabold">{layout.name}</strong> ({layout.poses} {layout.poses === 1 ? 'Pose' : 'Poses'})</span>
+        </button>
 
-        <div className="flex gap-2 bg-white p-2 rounded-xl shadow-sm border border-pink-200 items-center px-4">
-          <Wand2 size={18} className="text-pink-400 mr-2" />
-          <select value={cameraFilter} onChange={(e) => onFilterChange(e.target.value)} className="bg-transparent text-gray-600 font-bold outline-none cursor-pointer">
+        {/* Camera Filter Selector */}
+        <div className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-2xl shadow-sm border-2 border-pink-200">
+          <Wand2 size={18} className="text-pink-400" />
+          <select
+            value={cameraFilter}
+            onChange={(e) => onFilterChange(e.target.value)}
+            className="bg-transparent text-gray-700 font-bold outline-none cursor-pointer"
+          >
             {BOOTH_PROTOCOL.filters.map((filter) => (
               <option key={filter.value} value={filter.value}>
                 {filter.label}
@@ -77,51 +94,201 @@ export const BoothCamera = ({
         </div>
       </div>
 
-      <div className="relative w-full aspect-[4/3] max-w-3xl bg-pink-50 rounded-2xl overflow-hidden border-4 border-white mb-6 shadow-inner flex" style={{ padding: '24px', backgroundColor: '#fff0f5' }}>
-        {layoutStyle === 'split-horizontal' && (
-          <div className="w-full h-full flex gap-4">
-             <video ref={video1} autoPlay playsInline muted style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }} className="w-1/2 h-full object-cover rounded-[20px] border-[12px] border-white" />
-             <video ref={video2} autoPlay playsInline muted style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }} className="w-1/2 h-full object-cover rounded-[20px] border-[12px] border-white" />
-          </div>
-        )}
-        {layoutStyle === 'split-vertical' && (
-          <div className="w-full h-full flex flex-col gap-4">
-             <video ref={video1} autoPlay playsInline muted style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }} className="w-full h-1/2 object-cover rounded-[20px] border-[12px] border-white" />
-             <video ref={video2} autoPlay playsInline muted style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }} className="w-full h-1/2 object-cover rounded-[20px] border-[12px] border-white" />
-          </div>
-        )}
-        {layoutStyle === 'pip' && (
-          <div className="w-full h-full relative">
-             <video ref={video1} autoPlay playsInline muted style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }} className="w-full h-full object-cover rounded-[20px] border-[12px] border-white" />
-             <video ref={video2} autoPlay playsInline muted style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }} className="absolute bottom-4 right-4 w-1/3 aspect-[4/3] object-cover rounded-[16px] border-[6px] border-white shadow-lg" />
-          </div>
-        )}
+      {/* Main Interactive Print Stage */}
+      <div className={`relative w-full ${layout.type === 'strip' ? 'max-w-xs sm:max-w-sm' : layout.type === '4R-portrait' ? 'max-w-md' : 'max-w-2xl'} bg-neutral-900 rounded-3xl p-4 sm:p-6 border-8 border-white mb-6 shadow-2xl overflow-hidden flex flex-col items-center`}>
+        {/* Print card outer wrapper matching active layout aspect ratio */}
+        <div
+          className="w-full relative bg-neutral-950 rounded-2xl p-3 shadow-inner overflow-hidden border border-neutral-800"
+          style={{
+            aspectRatio: layout.type === 'strip' ? '1/3' : layout.type === '4R-portrait' ? '2/3' : '3/2',
+          }}
+        >
+          {/* Render headers */}
+          {(layout.headers || []).map((header, idx) => (
+            <div
+              key={`header-${idx}`}
+              className="absolute z-10 flex flex-col items-center justify-center text-center p-1 overflow-hidden"
+              style={{
+                left: `${header.x}%`,
+                top: `${header.y}%`,
+                width: `${header.w}%`,
+                height: `${header.h}%`,
+              }}
+            >
+              <span className="font-serif italic font-bold text-white text-base sm:text-2xl drop-shadow">
+                {customTitle || 'Groom & Bride'}
+              </span>
+              <span className="text-xs sm:text-sm font-semibold text-gray-300">
+                {customDate || 'DD/MM/YY'}
+              </span>
+            </div>
+          ))}
 
-        <div className="absolute bottom-4 w-full text-center left-0 z-10">
-          <span className="font-black text-3xl text-pink-500 font-['M_PLUS_Rounded_1c'] drop-shadow-[0_2px_2px_rgba(255,255,255,1)]" style={{ WebkitTextStroke: '1px white' }}>
-             ✨ PURI-PURI BOOTH ✨
-          </span>
+          {/* Render photo boxes (Each containing Person 1 left half & Person 2 right half with 0 gap!) */}
+          {layout.boxes.map((box, idx) => {
+            const isCurrentActiveBox = currentPoseIndex === box.poseIndex;
+            const captured = capturedPoses[box.poseIndex];
+
+            return (
+              <div
+                key={`box-${idx}`}
+                className={`absolute bg-white rounded-xl p-1 shadow-md overflow-hidden flex transition-all ${
+                  isCurrentActiveBox && countdown !== null ? 'ring-4 ring-pink-400 scale-[1.01]' : ''
+                }`}
+                style={{
+                  left: `${box.x}%`,
+                  top: `${box.y}%`,
+                  width: `${box.w}%`,
+                  height: `${box.h}%`,
+                }}
+              >
+                {/* Person 1 (Host) - Left 50% width (0 gap) */}
+                <div className="w-1/2 h-full relative overflow-hidden bg-pink-100 border-r border-white/20">
+                  {captured?.host ? (
+                    <img
+                      src={captured.host}
+                      alt="Host captured"
+                      className="w-full h-full object-cover"
+                      style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }}
+                    />
+                  ) : (
+                    <video
+                      ref={(el) => {
+                        if (el && video1Stream && el.srcObject !== video1Stream) {
+                          el.srcObject = video1Stream;
+                          el.play().catch(() => {});
+                        }
+                      }}
+                      autoPlay
+                      playsInline
+                      muted
+                      style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }}
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                  <span className="absolute bottom-1 left-1 bg-black/40 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md backdrop-blur-xs">
+                    You
+                  </span>
+                </div>
+
+                {/* Person 2 (Guest) - Right 50% width (0 gap!) */}
+                <div className="w-1/2 h-full relative overflow-hidden bg-pink-100">
+                  {captured?.guest ? (
+                    <img
+                      src={captured.guest}
+                      alt="Guest captured"
+                      className="w-full h-full object-cover"
+                      style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }}
+                    />
+                  ) : (
+                    <video
+                      ref={(el) => {
+                        if (el && video2Stream && el.srcObject !== video2Stream) {
+                          el.srcObject = video2Stream;
+                          el.play().catch(() => {});
+                        }
+                      }}
+                      autoPlay
+                      playsInline
+                      muted
+                      style={{ filter: getFilterStyle(), transform: 'scaleX(-1)' }}
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                  <span className="absolute bottom-1 right-1 bg-black/40 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md backdrop-blur-xs">
+                    Friend
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Render footers */}
+          {(layout.footers || []).map((footer, idx) => (
+            <div
+              key={`footer-${idx}`}
+              className="absolute z-10 flex flex-col items-center justify-center text-center p-1 overflow-hidden"
+              style={{
+                left: `${footer.x}%`,
+                top: `${footer.y}%`,
+                width: `${footer.w}%`,
+                height: `${footer.h}%`,
+              }}
+            >
+              {footer.type === 'logo_only' ? (
+                <span className="font-black text-pink-300 text-xs sm:text-sm tracking-wider">
+                  ✨ PURI-PURI BOOTH ✨
+                </span>
+              ) : footer.type === 'horizontal_bar' ? (
+                <div className="w-full flex items-center justify-between px-2 text-white">
+                  <span className="text-xs font-bold text-gray-300">{customDate || 'DD/MM/YY'}</span>
+                  <span className="font-serif italic font-bold text-sm sm:text-lg">{customTitle || 'Groom & Bride'}</span>
+                  <span className="text-xs font-black text-pink-300">✨ PURI-PURI BOOTH ✨</span>
+                </div>
+              ) : (
+                <>
+                  <span className="font-serif italic font-bold text-white text-base sm:text-2xl drop-shadow">
+                    {customTitle || 'Groom & Bride'}
+                  </span>
+                  <span className="text-xs sm:text-sm font-semibold text-gray-300 mb-1">
+                    {customDate || 'DD/MM/YY'}
+                  </span>
+                  <span className="font-black text-pink-300 text-xs tracking-wider">
+                    ✨ PURI-PURI BOOTH ✨
+                  </span>
+                </>
+              )}
+            </div>
+          ))}
         </div>
 
+        {/* Live Countdown & Session Overlay */}
         {countdown !== null && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20 rounded-2xl">
-            <span className="text-9xl font-black text-white drop-shadow-[0_0_20px_rgba(251,113,133,0.8)] animate-bounce">{countdown}</span>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-xs flex flex-col items-center justify-center z-30 rounded-3xl">
+            <div className="bg-pink-500 text-white px-6 py-2 rounded-full font-black text-lg mb-4 shadow-lg flex items-center gap-2 animate-bounce">
+              <Sparkles size={20} /> Pose {currentPoseIndex + 1} of {totalPoses} <Sparkles size={20} />
+            </div>
+            <span className="text-9xl font-black text-white drop-shadow-[0_0_30px_rgba(236,72,153,0.9)] animate-pulse">
+              {countdown}
+            </span>
           </div>
         )}
-        
-        {flash && <div className="absolute inset-0 bg-white z-30 opacity-100 animate-pulse rounded-2xl"></div>}
+
+        {/* Camera Flash Overlay */}
+        {flash && <div className="absolute inset-0 bg-white z-40 animate-pulse rounded-3xl" />}
       </div>
-      
-      <div className="flex gap-4">
-        <Button icon={Camera} onClick={triggerSyncCountdown} className="px-10 py-4 text-lg">
-          Take Photo
+
+      {/* Bottom Action Controls */}
+      <div className="flex flex-wrap justify-center gap-4">
+        <Button
+          icon={Camera}
+          onClick={triggerSyncCountdown}
+          disabled={countdown !== null}
+          className="px-10 py-4 text-lg"
+        >
+          {countdown !== null
+            ? `Taking Pose ${currentPoseIndex + 1} of ${layout.poses}...`
+            : `Start Session (${layout.poses} ${layout.poses === 1 ? 'Pose' : 'Poses'})`}
         </Button>
+
         {hasPhotos && (
           <Button icon={ImageIcon} variant="secondary" onClick={onGoToGallery}>
             Gallery
           </Button>
         )}
       </div>
+
+      {/* Layout Picker Modal */}
+      <LayoutPickerModal
+        isOpen={isLayoutPickerOpen}
+        onClose={() => setIsLayoutPickerOpen(false)}
+        selectedLayoutId={layoutStyle}
+        onSelectLayout={onLayoutChange}
+        customTitle={customTitle}
+        onTitleChange={onTitleChange}
+        customDate={customDate}
+        onDateChange={onDateChange}
+      />
     </div>
   );
 };

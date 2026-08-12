@@ -1,13 +1,25 @@
+import { LAYOUT_DEFINITIONS } from './layoutsConfig';
+
 export const BOOTH_PROTOCOL = Object.freeze({
   defaults: Object.freeze({
-    layoutStyle: 'split-horizontal',
+    layoutStyle: 'layout-a',
     cameraFilter: 'none',
+    customTitle: 'Groom & Bride',
+    customDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }),
   }),
-  layouts: Object.freeze([
-    Object.freeze({ value: 'split-horizontal', label: 'Split Horizontal' }),
-    Object.freeze({ value: 'split-vertical', label: 'Split Vertical' }),
-    Object.freeze({ value: 'pip', label: 'Picture-in-Picture' }),
-  ]),
+  layouts: Object.freeze(
+    LAYOUT_DEFINITIONS.map((l) =>
+      Object.freeze({
+        value: l.id,
+        label: `${l.name} - ${l.subtitle}`,
+        id: l.id,
+        name: l.name,
+        subtitle: l.subtitle,
+        type: l.type,
+        poses: l.poses,
+      })
+    )
+  ),
   filters: Object.freeze([
     Object.freeze({ value: 'none', label: 'Normal' }),
     Object.freeze({ value: 'kawaii', label: '🌸 Kawaii' }),
@@ -21,7 +33,11 @@ export const BOOTH_PROTOCOL = Object.freeze({
     layoutChange: 'LAYOUT_CHANGE',
     filterChange: 'FILTER_CHANGE',
     syncStickers: 'SYNC_STICKERS',
+    updateSticker: 'UPDATE_STICKER',
     initiateFinish: 'INITIATE_FINISH',
+    startSession: 'START_SESSION',
+    titleChange: 'TITLE_CHANGE',
+    dateChange: 'DATE_CHANGE',
   }),
   limits: Object.freeze({
     maxRemotePhotoDataUrlLength: 5_000_000,
@@ -52,27 +68,27 @@ const isValidSticker = (sticker) => {
     && sticker.size <= BOOTH_PROTOCOL.limits.maxStickerSize;
 };
 
+export const dataUrlToBlob = (dataUrl) => {
+  const split = dataUrl.split(',');
+  const mimeMatch = split[0].match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  const b64 = split[1] || split[0];
+  const byteCharacters = atob(b64);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  return new Blob([byteArray], { type: mime });
+};
+
 export const createPhotoObjectUrl = async (photoPayload) => {
   if (photoPayload instanceof Blob) {
     return URL.createObjectURL(photoPayload);
   }
 
   if (typeof photoPayload === 'string' && photoPayload.length > 0) {
-    const split = photoPayload.split(',');
-    const b64 = split[1] || split[0];
-    const byteCharacters = atob(b64);
-    const byteArrays = [];
-
-    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-      const slice = byteCharacters.slice(offset, offset + 512);
-      const byteArraysChunk = new Array(slice.length);
-      for (let i = 0; i < slice.length; i++) {
-        byteArraysChunk[i] = slice.charCodeAt(i);
-      }
-      byteArrays.push(new Uint8Array(byteArraysChunk));
-    }
-
-    const blob = new Blob(byteArrays, { type: 'image/jpeg' });
+    const blob = dataUrlToBlob(photoPayload);
     return URL.createObjectURL(blob);
   }
 
@@ -89,7 +105,12 @@ export const normalizePeerMessage = (data) => {
   switch (data.type) {
     case messageTypes.countdownTick:
       if (data.count === null || (Number.isInteger(data.count) && data.count >= 0 && data.count <= 9)) {
-        return { type: data.type, count: data.count };
+        return {
+          type: data.type,
+          count: data.count,
+          poseIndex: typeof data.poseIndex === 'number' ? data.poseIndex : 0,
+          totalPoses: typeof data.totalPoses === 'number' ? data.totalPoses : 1,
+        };
       }
       return null;
     case messageTypes.photoTaken:
@@ -99,10 +120,26 @@ export const normalizePeerMessage = (data) => {
       return null;
     case messageTypes.backToBooth:
     case messageTypes.initiateFinish:
+    case messageTypes.startSession:
       return { type: data.type };
     case messageTypes.layoutChange:
       if (typeof data.layoutStyle === 'string' && LAYOUT_VALUES.has(data.layoutStyle)) {
-        return { type: data.type, layoutStyle: data.layoutStyle };
+        return {
+          type: data.type,
+          layoutStyle: data.layoutStyle,
+          customTitle: typeof data.customTitle === 'string' ? data.customTitle : undefined,
+          customDate: typeof data.customDate === 'string' ? data.customDate : undefined,
+        };
+      }
+      return null;
+    case messageTypes.titleChange:
+      if (typeof data.customTitle === 'string') {
+        return { type: data.type, customTitle: data.customTitle };
+      }
+      return null;
+    case messageTypes.dateChange:
+      if (typeof data.customDate === 'string') {
+        return { type: data.type, customDate: data.customDate };
       }
       return null;
     case messageTypes.filterChange:
@@ -113,6 +150,11 @@ export const normalizePeerMessage = (data) => {
     case messageTypes.syncStickers:
       if (Array.isArray(data.stickers) && data.stickers.length <= limits.maxRemoteStickers && data.stickers.every(isValidSticker)) {
         return { type: data.type, stickers: data.stickers };
+      }
+      return null;
+    case messageTypes.updateSticker:
+      if (isValidSticker(data.sticker)) {
+        return { type: data.type, sticker: data.sticker };
       }
       return null;
     default:

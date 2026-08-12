@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { loadScript } from '../utils/loadScript';
-import { BOOTH_PROTOCOL, normalizePeerMessage } from '../utils/boothProtocol';
+import { BOOTH_PROTOCOL, normalizePeerMessage, dataUrlToBlob } from '../utils/boothProtocol';
+import { getLayoutById, compileLayoutCanvas } from '../utils/layoutsConfig';
 import { useGoogleAuth } from './useGoogleAuth';
 import { useWebRTC } from './useWebRTC';
 
@@ -13,22 +14,23 @@ export const useBoothController = () => {
   const [joinIdInput, setJoinIdInput] = useState('');
   const [photos, setPhotos] = useState([]);
   const [countdown, setCountdown] = useState(null);
+  const [currentPoseIndex, setCurrentPoseIndex] = useState(0);
+  const [totalPoses, setTotalPoses] = useState(1);
+  const [capturedPoses, setCapturedPoses] = useState([]);
   const [flash, setFlash] = useState(false);
   const [layoutStyle, setLayoutStyle] = useState(BOOTH_PROTOCOL.defaults.layoutStyle);
   const [cameraFilter, setCameraFilter] = useState(BOOTH_PROTOCOL.defaults.cameraFilter);
+  const [customTitle, setCustomTitle] = useState(BOOTH_PROTOCOL.defaults.customTitle);
+  const [customDate, setCustomDate] = useState(BOOTH_PROTOCOL.defaults.customDate);
   const [rawPhoto, setRawPhoto] = useState(null);
   const [stickers, setStickers] = useState([]);
   const [isFinishing, setIsFinishing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
 
-  const hiddenLocalVideoRef = useRef(null);
-  const hiddenRemoteVideoRef = useRef(null);
-  const latestStateRef = useRef({ layoutStyle, cameraFilter });
-
-  useEffect(() => {
-    latestStateRef.current = { layoutStyle, cameraFilter };
-  }, [layoutStyle, cameraFilter]);
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const latestStateRef = useRef({ layoutStyle, cameraFilter, role: null, customTitle, customDate });
 
   const resetToBooth = useCallback(() => {
     setAppState('BOOTH');
@@ -36,14 +38,16 @@ export const useBoothController = () => {
     setStickers([]);
     setIsFinishing(false);
     setCountdown(null);
+    setCapturedPoses([]);
+    setCurrentPoseIndex(0);
     setIsUploading(false);
     setUploadSuccess(false);
   }, []);
 
   const safelyUpdatePhotos = useCallback((newPhotoUrl) => {
-    setPhotos(prev => {
+    setPhotos((prev) => {
       let newHistory = [...prev, newPhotoUrl];
-      if (newHistory.length > 3) newHistory = newHistory.slice(1);
+      if (newHistory.length > 5) newHistory = newHistory.slice(1);
       return newHistory;
     });
   }, []);
@@ -51,21 +55,24 @@ export const useBoothController = () => {
   useEffect(() => {
     const init = async () => {
       try {
-        await Promise.all([
-          loadScript('https://accounts.google.com/gsi/client', 'google-gis-script'),
-        ]);
+        await Promise.all([loadScript('https://accounts.google.com/gsi/client', 'google-gis-script')]);
       } catch (error) {
         console.warn('⚠️ [App] Failed to load Google sign-in script.', error);
         setErrorMsg('Failed to load Google sign-in services. Please refresh and try again.');
       }
     };
-
     init();
   }, []);
 
-  const { 
-    role, peerId, localStream, remoteStream,
-    startHostSession, startGuestSession, sendData, cleanupWebRTC,
+  const {
+    role,
+    peerId,
+    localStream,
+    remoteStream,
+    startHostSession,
+    startGuestSession,
+    sendData,
+    cleanupWebRTC,
   } = useWebRTC(setErrorMsg, (data) => {
     const normalizedData = normalizePeerMessage(data);
     if (!normalizedData) {
@@ -75,6 +82,17 @@ export const useBoothController = () => {
 
     if (normalizedData.type === BOOTH_PROTOCOL.messageTypes.countdownTick) {
       setCountdown(normalizedData.count);
+      setCurrentPoseIndex(normalizedData.poseIndex || 0);
+      setTotalPoses(normalizedData.totalPoses || 1);
+      if (normalizedData.count === 0) {
+        triggerFlash();
+        const posePair = captureSinglePosePair();
+        setCapturedPoses((prev) => {
+          const next = [...prev];
+          next[normalizedData.poseIndex || 0] = posePair;
+          return next;
+        });
+      }
     } else if (normalizedData.type === BOOTH_PROTOCOL.messageTypes.photoTaken) {
       triggerFlash();
       setRawPhoto(normalizedData.photoUrl);
@@ -85,23 +103,33 @@ export const useBoothController = () => {
       resetToBooth();
     } else if (normalizedData.type === BOOTH_PROTOCOL.messageTypes.layoutChange) {
       setLayoutStyle(normalizedData.layoutStyle);
+      if (normalizedData.customTitle) setCustomTitle(normalizedData.customTitle);
+      if (normalizedData.customDate) setCustomDate(normalizedData.customDate);
+    } else if (normalizedData.type === BOOTH_PROTOCOL.messageTypes.titleChange) {
+      setCustomTitle(normalizedData.customTitle);
+    } else if (normalizedData.type === BOOTH_PROTOCOL.messageTypes.dateChange) {
+      setCustomDate(normalizedData.customDate);
     } else if (normalizedData.type === BOOTH_PROTOCOL.messageTypes.filterChange) {
       setCameraFilter(normalizedData.cameraFilter);
     } else if (normalizedData.type === BOOTH_PROTOCOL.messageTypes.syncStickers) {
       setStickers(normalizedData.stickers);
+    } else if (normalizedData.type === BOOTH_PROTOCOL.messageTypes.updateSticker) {
+      setStickers((prev) =>
+        prev.map((s) => (s.id === normalizedData.sticker.id ? { ...s, ...normalizedData.sticker } : s))
+      );
     } else if (normalizedData.type === BOOTH_PROTOCOL.messageTypes.initiateFinish) {
       setIsFinishing(true);
     }
   });
 
-  const { googleToken, handleGoogleLogin } = useGoogleAuth(
-    GOOGLE_CLIENT_ID,
-    setErrorMsg,
-    () => {
-      setAppState('HOST_WAITING');
-      startHostSession(() => setAppState('BOOTH'));
-    }
-  );
+  useEffect(() => {
+    latestStateRef.current = { layoutStyle, cameraFilter, role, customTitle, customDate };
+  }, [layoutStyle, cameraFilter, role, customTitle, customDate]);
+
+  const { googleToken, handleGoogleLogin } = useGoogleAuth(GOOGLE_CLIENT_ID, setErrorMsg, () => {
+    setAppState('HOST_WAITING');
+    startHostSession(() => setAppState('BOOTH'));
+  });
 
   useEffect(() => {
     return () => {
@@ -110,13 +138,19 @@ export const useBoothController = () => {
   }, [cleanupWebRTC]);
 
   useEffect(() => {
-    if (hiddenLocalVideoRef.current && localStream) hiddenLocalVideoRef.current.srcObject = localStream;
-    if (hiddenRemoteVideoRef.current && remoteStream) hiddenRemoteVideoRef.current.srcObject = remoteStream;
+    if (localVideoRef.current && localStream && localVideoRef.current.srcObject !== localStream) {
+      localVideoRef.current.srcObject = localStream;
+      localVideoRef.current.play().catch((err) => console.warn('Local video play failed:', err));
+    }
+    if (remoteVideoRef.current && remoteStream && remoteVideoRef.current.srcObject !== remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+      remoteVideoRef.current.play().catch((err) => console.warn('Remote video play failed:', err));
+    }
   }, [localStream, remoteStream]);
 
   const triggerFlash = () => {
     setFlash(true);
-    setTimeout(() => setFlash(false), 200);
+    setTimeout(() => setFlash(false), 250);
   };
 
   const handleGoToGallery = () => {
@@ -128,142 +162,129 @@ export const useBoothController = () => {
   };
 
   const handleGoHome = () => {
+    cleanupWebRTC();
     setAppState('LANDING');
+    setErrorMsg('');
   };
 
-  const capturePhoto = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1280;
-    canvas.height = 960;
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width;
-    const h = canvas.height;
+  /**
+   * Snaps a single pose pair (Host frame + Guest frame)
+   */
+  const captureSinglePosePair = () => {
+    const currentRole = latestStateRef.current.role;
 
-    const currentLayout = latestStateRef.current.layoutStyle;
-    const currentFilter = latestStateRef.current.cameraFilter;
+    const primaryVideo = currentRole === 'host' ? localVideoRef.current : remoteVideoRef.current;
+    const secondaryVideo = currentRole === 'guest' ? localVideoRef.current : remoteVideoRef.current;
 
-    ctx.fillStyle = '#fff0f5';
-    ctx.fillRect(0, 0, w, h);
-
-    if (currentFilter === 'kawaii') ctx.filter = 'brightness(1.15) saturate(1.3) contrast(1.05) sepia(0.2) hue-rotate(-5deg)';
-    else if (currentFilter === 'vintage') ctx.filter = 'sepia(0.7) contrast(1.1) brightness(0.9)';
-    else if (currentFilter === 'bnw') ctx.filter = 'grayscale(1) contrast(1.2)';
-    else ctx.filter = 'none';
-
-    const drawVideo = (videoElem, x, y, width, height) => {
-      if (videoElem && videoElem.readyState >= 2) {
-        const vidRatio = videoElem.videoWidth / videoElem.videoHeight;
-        const targetRatio = width / height;
-        let sWidth = videoElem.videoWidth, sHeight = videoElem.videoHeight, sx = 0, sy = 0;
-
-        if (vidRatio > targetRatio) {
-          sWidth = sHeight * targetRatio;
-          sx = (videoElem.videoWidth - sWidth) / 2;
+    const createHalfCanvas = (videoElem) => {
+      const c = document.createElement('canvas');
+      c.width = 640;
+      c.height = 480;
+      const ctx = c.getContext('2d');
+      if (videoElem && videoElem.readyState >= 2 && (videoElem.videoWidth || videoElem.width)) {
+        const vw = videoElem.videoWidth || videoElem.width || 640;
+        const vh = videoElem.videoHeight || videoElem.height || 480;
+        const sourceRatio = vw / vh;
+        const targetRatio = 640 / 480;
+        let sWidth = vw;
+        let sHeight = vh;
+        let sx = 0;
+        let sy = 0;
+        if (sourceRatio > targetRatio) {
+          sWidth = vh * targetRatio;
+          sx = (vw - sWidth) / 2;
         } else {
-          sHeight = sWidth / targetRatio;
-          sy = (videoElem.videoHeight - sHeight) / 2;
+          sHeight = vw / targetRatio;
+          sy = (vh - sHeight) / 2;
         }
-        ctx.save();
-        ctx.translate(x + width, y);
-        ctx.scale(-1, 1);
-        ctx.beginPath();
-        ctx.roundRect(0, 0, width, height, [20]);
-        ctx.clip();
-        ctx.drawImage(videoElem, sx, sy, sWidth, sHeight, 0, 0, width, height);
-        ctx.restore();
+        ctx.drawImage(videoElem, sx, sy, sWidth, sHeight, 0, 0, 640, 480);
+      } else {
+        ctx.fillStyle = '#fbcfe8';
+        ctx.fillRect(0, 0, 640, 480);
       }
+      return c.toDataURL('image/png');
     };
 
-    const pad = 24;
-    const primaryVideo = hiddenLocalVideoRef.current;
-    const secondaryVideo = hiddenRemoteVideoRef.current;
-
-    if (currentLayout === 'split-horizontal') {
-      const halfW = (w / 2) - (pad * 1.5);
-      const drawH = h - (pad * 2);
-      drawVideo(primaryVideo, pad, pad, halfW, drawH);
-      drawVideo(secondaryVideo, w / 2 + (pad / 2), pad, halfW, drawH);
-
-      ctx.filter = 'none';
-      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 16;
-      ctx.beginPath(); ctx.roundRect(pad, pad, halfW, drawH, [20]); ctx.stroke();
-      ctx.beginPath(); ctx.roundRect(w / 2 + (pad / 2), pad, halfW, drawH, [20]); ctx.stroke();
-    } else if (currentLayout === 'split-vertical') {
-      const drawW = w - (pad * 2);
-      const halfH = (h / 2) - (pad * 1.5);
-      drawVideo(primaryVideo, pad, pad, drawW, halfH);
-      drawVideo(secondaryVideo, pad, h / 2 + (pad / 2), drawW, halfH);
-
-      ctx.filter = 'none';
-      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 16;
-      ctx.beginPath(); ctx.roundRect(pad, pad, drawW, halfH, [20]); ctx.stroke();
-      ctx.beginPath(); ctx.roundRect(pad, h / 2 + (pad / 2), drawW, halfH, [20]); ctx.stroke();
-    } else if (currentLayout === 'pip') {
-      const drawW = w - (pad * 2);
-      const drawH = h - (pad * 2);
-      const pipW = drawW / 3.5;
-      const pipH = drawH / 3.5;
-
-      drawVideo(primaryVideo, pad, pad, drawW, drawH);
-      drawVideo(secondaryVideo, w - pipW - (pad * 2), h - pipH - (pad * 2), pipW, pipH);
-
-      ctx.filter = 'none';
-      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 16;
-      ctx.beginPath(); ctx.roundRect(pad, pad, drawW, drawH, [20]); ctx.stroke();
-      ctx.lineWidth = 8;
-      ctx.beginPath(); ctx.roundRect(w - pipW - (pad * 2), h - pipH - (pad * 2), pipW, pipH, [16]); ctx.stroke();
-    }
-
-    ctx.fillStyle = '#ff69b4';
-    ctx.font = '900 36px "M PLUS Rounded 1c", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = 'white';
-    ctx.strokeText('✨ PURI-PURI BOOTH ✨', w / 2, h - 30);
-    ctx.fillText('✨ PURI-PURI BOOTH ✨', w / 2, h - 30);
-
-    return canvas.toDataURL('image/jpeg', 0.75);
+    return {
+      host: createHalfCanvas(primaryVideo),
+      guest: createHalfCanvas(secondaryVideo),
+    };
   };
 
-  const triggerSyncCountdown = () => {
-    let count = 3;
-    setCountdown(count);
-    sendData({ type: BOOTH_PROTOCOL.messageTypes.countdownTick, count });
+  /**
+   * Executes multi-pose capture session based on active layout pose count.
+   */
+  const triggerSyncCountdown = async () => {
+    const activeLayout = getLayoutById(latestStateRef.current.layoutStyle);
+    const posesNeeded = activeLayout.poses;
+    const accumulatedPoses = [];
 
-    const interval = setInterval(() => {
-      count -= 1;
-      if (count > 0) {
-        setCountdown(count);
-        sendData({ type: BOOTH_PROTOCOL.messageTypes.countdownTick, count });
-      } else {
-        clearInterval(interval);
-        setCountdown(null);
-        sendData({ type: BOOTH_PROTOCOL.messageTypes.countdownTick, count: null });
+    setCapturedPoses([]);
 
-        triggerFlash();
-        setTimeout(() => {
-          takePhotoAndDecorateLocal();
-        }, 50);
+    for (let p = 0; p < posesNeeded; p++) {
+      setCurrentPoseIndex(p);
+      setTotalPoses(posesNeeded);
+
+      // Countdown 3..2..1
+      for (let c = 3; c >= 1; c--) {
+        setCountdown(c);
+        sendData({
+          type: BOOTH_PROTOCOL.messageTypes.countdownTick,
+          count: c,
+          poseIndex: p,
+          totalPoses: posesNeeded,
+        });
+        await new Promise((res) => setTimeout(res, 1000));
       }
-    }, 1000);
-  };
 
-  const takePhotoAndDecorateLocal = async () => {
-    try {
-      const photoDataUrl = capturePhoto();
-      setRawPhoto(photoDataUrl);
-      setStickers([]);
-      setIsFinishing(false);
-      setAppState('DECORATE');
+      setCountdown(0);
+      sendData({
+        type: BOOTH_PROTOCOL.messageTypes.countdownTick,
+        count: 0,
+        poseIndex: p,
+        totalPoses: posesNeeded,
+      });
 
-      sendData({ type: BOOTH_PROTOCOL.messageTypes.photoTaken, photoUrl: photoDataUrl });
-    } catch (error) {
-      setErrorMsg(`Failed to capture photo: ${error.message}`);
+      triggerFlash();
+      await new Promise((res) => setTimeout(res, 80));
+
+      const posePair = captureSinglePosePair();
+      accumulatedPoses.push(posePair);
+      setCapturedPoses([...accumulatedPoses]);
+
+      setCountdown(null);
+      sendData({
+        type: BOOTH_PROTOCOL.messageTypes.countdownTick,
+        count: null,
+        poseIndex: p,
+        totalPoses: posesNeeded,
+      });
+
+      // Pause between poses if more remain
+      if (p < posesNeeded - 1) {
+        await new Promise((res) => setTimeout(res, 1200));
+      }
     }
+
+    // All poses snapped! Compile layout canvas.
+    const compiledPhotoUrl = await compileLayoutCanvas({
+      layoutId: latestStateRef.current.layoutStyle,
+      poseImages: accumulatedPoses,
+      customTitle: latestStateRef.current.customTitle,
+      customDate: latestStateRef.current.customDate,
+      cameraFilter: latestStateRef.current.cameraFilter,
+    });
+
+    setRawPhoto(compiledPhotoUrl);
+    setStickers([]);
+    setIsFinishing(false);
+    setAppState('DECORATE');
+
+    sendData({ type: BOOTH_PROTOCOL.messageTypes.photoTaken, photoUrl: compiledPhotoUrl });
   };
 
   const handleAddSticker = (emoji) => {
-    setStickers(prev => {
+    setStickers((prev) => {
       const newStickers = [...prev, { id: Date.now(), emoji, x: 640, y: 480, size: 120 }];
       sendData({ type: BOOTH_PROTOCOL.messageTypes.syncStickers, stickers: newStickers });
       return newStickers;
@@ -271,9 +292,12 @@ export const useBoothController = () => {
   };
 
   const handleUpdateSticker = (id, newProps) => {
-    setStickers(prev => {
-      const newStickers = prev.map(s => s.id === id ? { ...s, ...newProps } : s);
-      sendData({ type: BOOTH_PROTOCOL.messageTypes.syncStickers, stickers: newStickers });
+    setStickers((prev) => {
+      const newStickers = prev.map((s) => (s.id === id ? { ...s, ...newProps } : s));
+      const targetSticker = newStickers.find((s) => s.id === id);
+      if (targetSticker) {
+        sendData({ type: BOOTH_PROTOCOL.messageTypes.updateSticker, sticker: targetSticker });
+      }
       return newStickers;
     });
   };
@@ -283,10 +307,13 @@ export const useBoothController = () => {
     sendData({ type: BOOTH_PROTOCOL.messageTypes.initiateFinish });
   };
 
-  const handleFinishDecoratingLocal = useCallback((finalPhotoPayload) => {
-    safelyUpdatePhotos(finalPhotoPayload);
-    setAppState('GALLERY');
-  }, [safelyUpdatePhotos]);
+  const handleFinishDecoratingLocal = useCallback(
+    (finalPhotoPayload) => {
+      safelyUpdatePhotos(finalPhotoPayload);
+      setAppState('GALLERY');
+    },
+    [safelyUpdatePhotos]
+  );
 
   const saveToGoogleDrive = async () => {
     if (!googleToken || photos.length === 0) return;
@@ -294,9 +321,7 @@ export const useBoothController = () => {
     setUploadSuccess(false);
 
     try {
-      const blobResponse = await fetch(photos[photos.length - 1]);
-      const blob = await blobResponse.blob();
-
+      const blob = dataUrlToBlob(photos[photos.length - 1]);
       const metadata = { name: `Purikura_${Date.now()}.jpg`, mimeType: 'image/jpeg' };
       const form = new FormData();
       form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
@@ -304,7 +329,7 @@ export const useBoothController = () => {
 
       const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${googleToken}` },
+        headers: { Authorization: `Bearer ${googleToken}` },
         body: form,
       });
 
@@ -336,18 +361,25 @@ export const useBoothController = () => {
     setJoinIdInput,
     photos,
     countdown,
+    currentPoseIndex,
+    totalPoses,
+    capturedPoses,
     flash,
     layoutStyle,
     setLayoutStyle,
     cameraFilter,
     setCameraFilter,
+    customTitle,
+    setCustomTitle,
+    customDate,
+    setCustomDate,
     rawPhoto,
     stickers,
     isFinishing,
     isUploading,
     uploadSuccess,
-    hiddenLocalVideoRef,
-    hiddenRemoteVideoRef,
+    localVideoRef,
+    remoteVideoRef,
     role,
     peerId,
     localStream,
@@ -360,7 +392,20 @@ export const useBoothController = () => {
     triggerSyncCountdown,
     handleLayoutChange: (nextLayoutStyle) => {
       setLayoutStyle(nextLayoutStyle);
-      sendData({ type: BOOTH_PROTOCOL.messageTypes.layoutChange, layoutStyle: nextLayoutStyle });
+      sendData({
+        type: BOOTH_PROTOCOL.messageTypes.layoutChange,
+        layoutStyle: nextLayoutStyle,
+        customTitle: latestStateRef.current.customTitle,
+        customDate: latestStateRef.current.customDate,
+      });
+    },
+    handleTitleChange: (nextTitle) => {
+      setCustomTitle(nextTitle);
+      sendData({ type: BOOTH_PROTOCOL.messageTypes.titleChange, customTitle: nextTitle });
+    },
+    handleDateChange: (nextDate) => {
+      setCustomDate(nextDate);
+      sendData({ type: BOOTH_PROTOCOL.messageTypes.dateChange, customDate: nextDate });
     },
     handleFilterChange: (nextCameraFilter) => {
       setCameraFilter(nextCameraFilter);
