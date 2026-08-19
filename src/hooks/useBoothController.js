@@ -162,6 +162,17 @@ export const useBoothController = () => {
     setTimeout(() => setFlash(false), 250);
   };
 
+  useEffect(() => {
+    if (localStream) {
+      const isCameraActive = appState === 'BOOTH' || appState === 'HOST_WAITING' || appState === 'GUEST_JOIN';
+      localStream.getVideoTracks().forEach((track) => {
+        if (track.enabled !== isCameraActive) {
+          track.enabled = isCameraActive;
+        }
+      });
+    }
+  }, [appState, localStream]);
+
   const handleGoToGallery = () => {
     setAppState('GALLERY');
   };
@@ -174,6 +185,15 @@ export const useBoothController = () => {
     cleanupWebRTC();
     setAppState('LANDING');
     setErrorMsg('');
+    setRawPhoto(null);
+    setStickers([]);
+    setIsFinishing(false);
+    setIsTakingPhotos(false);
+    setCountdown(null);
+    setCapturedPoses([]);
+    setCurrentPoseIndex(0);
+    setIsUploading(false);
+    setUploadSuccess(false);
   };
 
   /**

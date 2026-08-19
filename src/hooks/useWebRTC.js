@@ -67,7 +67,16 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
     setRole('host');
     
     const customId = 'booth-' + Math.random().toString(36).substring(2, 8);
-    const peer = new Peer(customId, { debug: 2 });
+    const peerOptions = {
+      debug: 2,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:global.stun.twilio.com:3478' }
+        ]
+      }
+    };
+    const peer = new Peer(customId, peerOptions);
     peerRef.current = peer;
 
     peer.on('open', (id) => {
@@ -102,7 +111,16 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
     if (!stream) return false;
 
     setRole('guest');
-    const peer = new Peer({ debug: 2 });
+    const peerOptions = {
+      debug: 2,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:global.stun.twilio.com:3478' }
+        ]
+      }
+    };
+    const peer = new Peer(peerOptions);
     peerRef.current = peer;
 
     peer.on('open', () => {

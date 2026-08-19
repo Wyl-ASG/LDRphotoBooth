@@ -57,13 +57,13 @@ export const BoothCamera = ({
     }
   };
 
-  const video1Stream = role === 'host' ? localStream : remoteStream;
-  const video2Stream = role === 'guest' ? localStream : remoteStream;
+  const hostStream = role === 'host' ? localStream : remoteStream;
+  const guestStream = role === 'guest' ? localStream : remoteStream;
 
   return (
     <div className="flex flex-col items-center w-full relative animate-fade-in">
       {/* Hidden persistent video elements to ensure stream capture is never interrupted */}
-      <div className="hidden" aria-hidden="true">
+      <div className="absolute opacity-0 pointer-events-none w-[1px] h-[1px] overflow-hidden" aria-hidden="true">
         <video ref={localVideoRef} autoPlay playsInline muted />
         <video ref={remoteVideoRef} autoPlay playsInline muted />
       </div>
@@ -155,8 +155,8 @@ export const BoothCamera = ({
                 ) : (
                   <video
                     ref={(el) => {
-                      if (el && video1Stream && el.srcObject !== video1Stream) {
-                        el.srcObject = video1Stream;
+                      if (el && hostStream && el.srcObject !== hostStream) {
+                        el.srcObject = hostStream;
                         el.play().catch(() => {});
                       }
                     }}
@@ -168,7 +168,7 @@ export const BoothCamera = ({
                   />
                 )}
                 <span className="absolute bottom-1 left-1 bg-black/40 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md backdrop-blur-xs">
-                  You
+                  {role === 'host' ? 'You' : 'Friend'}
                 </span>
               </div>
 
@@ -183,8 +183,8 @@ export const BoothCamera = ({
                 ) : (
                   <video
                     ref={(el) => {
-                      if (el && video2Stream && el.srcObject !== video2Stream) {
-                        el.srcObject = video2Stream;
+                      if (el && guestStream && el.srcObject !== guestStream) {
+                        el.srcObject = guestStream;
                         el.play().catch(() => {});
                       }
                     }}
@@ -196,7 +196,7 @@ export const BoothCamera = ({
                   />
                 )}
                 <span className="absolute bottom-1 right-1 bg-black/40 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md backdrop-blur-xs">
-                  Friend
+                  {role === 'guest' ? 'You' : 'Friend'}
                 </span>
               </div>
             </div>
