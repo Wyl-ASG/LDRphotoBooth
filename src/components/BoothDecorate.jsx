@@ -163,7 +163,7 @@ export const BoothDecorate = ({
     <div className="w-full flex flex-col items-center animate-fade-in">
       <h2 className="text-2xl font-bold mb-4 text-gray-800">✨ Decorate Time! ✨</h2>
 
-      <div className="flex flex-wrap justify-center gap-2 mb-4 bg-white p-3 rounded-2xl shadow-sm border-2 border-pink-100">
+      <div className="flex flex-wrap justify-center gap-2 mb-4 bg-white p-3 rounded-2xl shadow-xs border-2 border-pink-100">
         <span className="text-sm font-bold text-gray-400 self-center mr-2 uppercase tracking-wide">Stamps</span>
         {STAMPS.map((emoji) => (
           <button

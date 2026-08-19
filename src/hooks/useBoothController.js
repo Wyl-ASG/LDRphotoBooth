@@ -75,6 +75,8 @@ export const useBoothController = () => {
     startGuestSession,
     sendData,
     cleanupWebRTC,
+    stopCamera,
+    resumeCamera,
   } = useWebRTC(setErrorMsg, (data) => {
     const normalizedData = normalizePeerMessage(data);
     if (!normalizedData) {
@@ -163,15 +165,13 @@ export const useBoothController = () => {
   };
 
   useEffect(() => {
-    if (localStream) {
-      const isCameraActive = appState === 'BOOTH' || appState === 'HOST_WAITING' || appState === 'GUEST_JOIN';
-      localStream.getVideoTracks().forEach((track) => {
-        if (track.enabled !== isCameraActive) {
-          track.enabled = isCameraActive;
-        }
-      });
+    const isCameraActive = appState === 'BOOTH' || appState === 'HOST_WAITING' || appState === 'GUEST_JOIN';
+    if (isCameraActive) {
+      resumeCamera();
+    } else {
+      stopCamera();
     }
-  }, [appState, localStream]);
+  }, [appState, resumeCamera, stopCamera]);
 
   const handleGoToGallery = () => {
     setAppState('GALLERY');

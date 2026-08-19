@@ -63,7 +63,7 @@ export const BoothCamera = ({
   return (
     <div className="flex flex-col items-center w-full relative animate-fade-in">
       {/* Hidden persistent video elements to ensure stream capture is never interrupted */}
-      <div className="absolute opacity-0 pointer-events-none w-[1px] h-[1px] overflow-hidden" aria-hidden="true">
+      <div className="absolute opacity-0 pointer-events-none w-px h-px overflow-hidden" aria-hidden="true">
         <video ref={localVideoRef} autoPlay playsInline muted />
         <video ref={remoteVideoRef} autoPlay playsInline muted />
       </div>
@@ -74,20 +74,20 @@ export const BoothCamera = ({
         <button
           onClick={() => setIsLayoutPickerOpen(true)}
           disabled={isBusy}
-          className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-2xl shadow-sm border-2 border-pink-200 hover:border-pink-400 hover:bg-pink-50 transition-all font-bold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-pink-200 disabled:hover:bg-white"
+          className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-2xl shadow-xs border-2 border-pink-200 hover:border-pink-400 hover:bg-pink-50 transition-all font-bold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-pink-200 disabled:hover:bg-white"
         >
           <LayoutGrid size={20} className="text-pink-500" />
           <span>Layout: <strong className="text-pink-600 font-extrabold">{layout.name}</strong> ({layout.poses} {layout.poses === 1 ? 'Pose' : 'Poses'})</span>
         </button>
 
         {/* Camera Filter Selector */}
-        <div className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-2xl shadow-sm border-2 border-pink-200">
+        <div className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-2xl shadow-xs border-2 border-pink-200">
           <Wand2 size={18} className="text-pink-400" />
           <select
             value={cameraFilter}
             onChange={(e) => onFilterChange(e.target.value)}
             disabled={isBusy}
-            className="bg-transparent text-gray-700 font-bold outline-none cursor-pointer disabled:cursor-not-allowed"
+            className="bg-transparent text-gray-700 font-bold outline-hidden cursor-pointer disabled:cursor-not-allowed"
           >
             {BOOTH_PROTOCOL.filters.map((filter) => (
               <option key={filter.value} value={filter.value}>
@@ -117,7 +117,7 @@ export const BoothCamera = ({
               height: `${header.h}%`,
             }}
           >
-            <span className="italic font-bold text-white text-lg sm:text-2xl drop-shadow" style={{ fontFamily: "'Great Vibes', cursive" }}>
+            <span className="italic font-bold text-white text-lg sm:text-2xl drop-shadow-sm" style={{ fontFamily: "'Great Vibes', cursive" }}>
               {customTitle || 'Groom & Bride'}
             </span>
             <span className="text-xs sm:text-sm font-semibold text-gray-300">
@@ -227,7 +227,7 @@ export const BoothCamera = ({
               </div>
             ) : (
               <>
-                <span className="italic font-bold text-white text-lg sm:text-2xl drop-shadow mb-0.5" style={{ fontFamily: "'Great Vibes', cursive" }}>
+                <span className="italic font-bold text-white text-lg sm:text-2xl drop-shadow-sm mb-0.5" style={{ fontFamily: "'Great Vibes', cursive" }}>
                   {customTitle || 'Groom & Bride'}
                 </span>
                 <span className="text-xs sm:text-sm font-semibold text-gray-300 mb-1">
@@ -243,7 +243,7 @@ export const BoothCamera = ({
 
         {/* Live Countdown & Session Overlay */}
         {countdown !== null && (
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-xs flex flex-col items-center justify-center z-30 rounded-2xl">
+          <div className="absolute inset-0 bg-black/20 flex flex-col items-center justify-center z-30 rounded-2xl pointer-events-none">
             <div className="bg-pink-500 text-white px-6 py-2 rounded-full font-black text-lg mb-4 shadow-lg flex items-center gap-2 animate-bounce">
               <Sparkles size={20} /> Pose {currentPoseIndex + 1} of {totalPoses} <Sparkles size={20} />
             </div>

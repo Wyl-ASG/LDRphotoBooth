@@ -11,6 +11,8 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
   const peerRef = useRef(null);
   const connRef = useRef(null);
   const localStreamRef = useRef(null); 
+  const callRef = useRef(null);
+  const isGettingMediaRef = useRef(false);
 
   /* Keep the latest message handler in a ref so connection callbacks stay current. */
   const onDataMessageRef = useRef(onDataMessage);
@@ -19,7 +21,9 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
   }, [onDataMessage]);
 
   const startCamera = async () => {
+    if (isGettingMediaRef.current) return localStreamRef.current;
     try {
+      isGettingMediaRef.current = true;
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }, 
         audio: false 
@@ -31,6 +35,8 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
       console.warn('⚠️ [WebRTC] Failed to access camera.', error);
       setErrorMsg("Camera access denied. You must allow camera access.");
       return null;
+    } finally {
+      isGettingMediaRef.current = false;
     }
   };
 
@@ -89,7 +95,8 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
     });
 
     peer.on('call', (call) => {
-      call.answer(stream);
+      callRef.current = call;
+      call.answer(localStreamRef.current);
       call.on('stream', (remoteVideo) => {
         setRemoteStream(remoteVideo);
         setIsConnected(true);
@@ -128,7 +135,8 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
       connRef.current = conn;
       setupDataChannel(conn);
 
-      const call = peer.call(joinId, stream);
+      const call = peer.call(joinId, localStreamRef.current);
+      callRef.current = call;
       call.on('stream', (remoteVideo) => {
         setRemoteStream(remoteVideo);
         setIsConnected(true);
@@ -152,6 +160,40 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
     }
   };
 
+  const stopCamera = useCallback(() => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      setLocalStream(null);
+      localStreamRef.current = null;
+    }
+  }, []);
+
+  const resumeCamera = useCallback(async () => {
+    if (localStreamRef.current || isGettingMediaRef.current) return;
+    try {
+      isGettingMediaRef.current = true;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+        audio: false
+      });
+      setLocalStream(stream);
+      localStreamRef.current = stream;
+
+      if (callRef.current && callRef.current.peerConnection) {
+        const videoTrack = stream.getVideoTracks()[0];
+        const senders = callRef.current.peerConnection.getSenders();
+        const sender = senders.find((s) => s.track && s.track.kind === 'video');
+        if (sender && videoTrack) {
+          sender.replaceTrack(videoTrack);
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ [WebRTC] Failed to resume camera.', error);
+    } finally {
+      isGettingMediaRef.current = false;
+    }
+  }, []);
+
   const cleanupWebRTC = useCallback(() => {
     if (connRef.current) {
       try { connRef.current.close(); } catch { /* ignore */ }
@@ -165,6 +207,7 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
       try { peerRef.current.destroy(); } catch { /* ignore */ }
       peerRef.current = null;
     }
+    callRef.current = null;
     setLocalStream(null);
     setRemoteStream(null);
     setIsConnected(false);
@@ -174,6 +217,7 @@ export const useWebRTC = (setErrorMsg, onDataMessage) => {
 
   return {
     role, peerId, isConnected, localStream, remoteStream,
-    startHostSession, startGuestSession, sendData, cleanupWebRTC
+    startHostSession, startGuestSession, sendData, cleanupWebRTC,
+    stopCamera, resumeCamera
   };
 };

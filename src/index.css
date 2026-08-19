@@ -1,8 +1,49 @@
-@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=M+PLUS+Rounded+1c:wght@700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=M+PLUS+Rounded+1c:wght@700;900&display=swap')
+layer(base);
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility sticker-shadow {
+  /* Cute Sticker Drop Shadow Effect */
+  box-shadow: 6px 6px 0px #ffb6c1;
+}
+
+@utility sticker-shadow-hover {
+  &:hover {
+    box-shadow: 8px 8px 0px #ff69b4;
+    transform: translateY(-2px);
+  }
+}
+
+@utility sticker-shadow-active {
+  &:active {
+    box-shadow: 0px 0px 0px #ff69b4;
+    transform: translate(6px, 6px);
+  }
+}
+
+@utility glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+}
 
 @layer base {
 body {
@@ -16,26 +57,6 @@ color: #4a4a4a;
 
 h1, h2, h3, .brand-font {
 font-family: 'M PLUS Rounded 1c', sans-serif;
-}
-}
-
-@layer utilities {
-/* Cute Sticker Drop Shadow Effect */
-.sticker-shadow {
-box-shadow: 6px 6px 0px #ffb6c1;
-}
-.sticker-shadow-hover:hover {
-box-shadow: 8px 8px 0px #ff69b4;
-transform: translateY(-2px);
-}
-.sticker-shadow-active:active {
-box-shadow: 0px 0px 0px #ff69b4;
-transform: translate(6px, 6px);
-}
-
-.glass-panel {
-background: rgba(255, 255, 255, 0.85);
-backdrop-filter: blur(10px);
 }
 }
 

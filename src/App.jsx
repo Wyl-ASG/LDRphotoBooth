@@ -77,7 +77,7 @@ export default function App() {
           {appState !== 'LANDING' ? (
             <button
               onClick={handleGoHome}
-              className="absolute right-8 bg-pink-500 hover:bg-pink-600 text-white px-3 py-1 rounded-xl text-sm font-bold shadow transition-colors flex items-center gap-1 border-2 border-pink-300"
+              className="absolute right-8 bg-pink-500 hover:bg-pink-600 text-white px-3 py-1 rounded-xl text-sm font-bold shadow-sm transition-colors flex items-center gap-1 border-2 border-pink-300"
               title="Leave Room"
             >
               Leave
@@ -133,7 +133,7 @@ export default function App() {
               <input
                 type="text"
                 placeholder="e.g. booth-abc123"
-                className="w-full px-6 py-4 border-4 border-pink-100 rounded-2xl outline-none text-center font-mono text-2xl text-pink-600 font-bold transition-all focus:border-pink-400 focus:shadow-[4px_4px_0_#f472b6]"
+                className="w-full px-6 py-4 border-4 border-pink-100 rounded-2xl outline-hidden text-center font-mono text-2xl text-pink-600 font-bold transition-all focus:border-pink-400 focus:shadow-[4px_4px_0_#f472b6]"
                 value={joinIdInput}
                 onChange={(e) => setJoinIdInput(e.target.value)}
               />
@@ -151,7 +151,7 @@ export default function App() {
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-3xl text-pink-600 font-black">{peerId || '...'}</span>
                   {peerId && (
-                    <button onClick={() => navigator.clipboard.writeText(peerId)} className="bg-pink-200 text-pink-700 p-3 rounded-xl hover:bg-pink-300 transition-colors shadow-sm">
+                    <button onClick={() => navigator.clipboard.writeText(peerId)} className="bg-pink-200 text-pink-700 p-3 rounded-xl hover:bg-pink-300 transition-colors shadow-xs">
                       <Copy size={24} />
                     </button>
                   )}

@@ -24,7 +24,7 @@ export const LayoutPickerModal = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
       <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl border-4 border-pink-300 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="bg-pink-400 px-6 py-4 flex items-center justify-between text-white border-b-4 border-pink-500">
@@ -43,11 +43,11 @@ export const LayoutPickerModal = ({
         {/* Category Filter & Custom Text */}
         <div className="p-6 bg-pink-50/50 border-b border-pink-100 flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex gap-2 bg-white p-1.5 rounded-2xl shadow-sm border border-pink-200">
+            <div className="flex gap-2 bg-white p-1.5 rounded-2xl shadow-xs border border-pink-200">
               <button
                 onClick={() => setActiveTab('all')}
                 className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-                  activeTab === 'all' ? 'bg-pink-500 text-white shadow' : 'text-gray-600 hover:bg-pink-50'
+                  activeTab === 'all' ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-600 hover:bg-pink-50'
                 }`}
               >
                 All Formats (12)
@@ -55,7 +55,7 @@ export const LayoutPickerModal = ({
               <button
                 onClick={() => setActiveTab('strip')}
                 className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-                  activeTab === 'strip' ? 'bg-pink-500 text-white shadow' : 'text-gray-600 hover:bg-pink-50'
+                  activeTab === 'strip' ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-600 hover:bg-pink-50'
                 }`}
               >
                 2x6 Strips (A-D)
@@ -63,7 +63,7 @@ export const LayoutPickerModal = ({
               <button
                 onClick={() => setActiveTab('4R')}
                 className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-                  activeTab === '4R' ? 'bg-pink-500 text-white shadow' : 'text-gray-600 hover:bg-pink-50'
+                  activeTab === '4R' ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-600 hover:bg-pink-50'
                 }`}
               >
                 6x4 4R Landscape (E-J, L)
@@ -71,7 +71,7 @@ export const LayoutPickerModal = ({
               <button
                 onClick={() => setActiveTab('4R-portrait')}
                 className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-                  activeTab === '4R-portrait' ? 'bg-pink-500 text-white shadow' : 'text-gray-600 hover:bg-pink-50'
+                  activeTab === '4R-portrait' ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-600 hover:bg-pink-50'
                 }`}
               >
                 6x4 4R Portrait (K)
@@ -80,7 +80,7 @@ export const LayoutPickerModal = ({
           </div>
 
           {/* Text customization controls */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white p-4 rounded-2xl border border-pink-200 shadow-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white p-4 rounded-2xl border border-pink-200 shadow-xs">
             <div>
               <label className="text-xs font-black text-pink-600 uppercase tracking-wider block mb-1 flex items-center gap-1">
                 <Edit3 size={14} /> Custom Title (Script Font)
@@ -90,7 +90,7 @@ export const LayoutPickerModal = ({
                 value={customTitle}
                 onChange={(e) => onTitleChange(e.target.value)}
                 placeholder="e.g. Groom & Bride"
-                className="w-full px-4 py-2 rounded-xl border-2 border-pink-100 outline-none text-gray-800 font-bold focus:border-pink-400"
+                className="w-full px-4 py-2 rounded-xl border-2 border-pink-100 outline-hidden text-gray-800 font-bold focus:border-pink-400"
               />
             </div>
             <div>
@@ -102,7 +102,7 @@ export const LayoutPickerModal = ({
                 value={customDate}
                 onChange={(e) => onDateChange(e.target.value)}
                 placeholder="e.g. 2026.08.12"
-                className="w-full px-4 py-2 rounded-xl border-2 border-pink-100 outline-none text-gray-800 font-bold focus:border-pink-400"
+                className="w-full px-4 py-2 rounded-xl border-2 border-pink-100 outline-hidden text-gray-800 font-bold focus:border-pink-400"
               />
             </div>
           </div>
@@ -190,7 +190,7 @@ export const LayoutPickerModal = ({
                   </svg>
 
                   {isSelected && (
-                    <div className="absolute top-2 right-2 bg-pink-500 text-white rounded-full p-1.5 shadow">
+                    <div className="absolute top-2 right-2 bg-pink-500 text-white rounded-full p-1.5 shadow-sm">
                       <Check size={16} />
                     </div>
                   )}
