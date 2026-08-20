@@ -13,7 +13,7 @@
 ## ✨ Features
 
 - 📹 **Real-Time WebRTC P2P Video Streaming**: Direct peer-to-peer connection powered by PeerJS. Video and data stream directly between participants without intermediate video servers.
-- ⏱️ **Synchronized Camera Countdown**: Dual-camera capture triggers simultaneously for host and guest, rendering both video feeds side-by-side for every pose.
+- ⏱️ **Synchronized Camera Countdown & Burst Mode**: Dual-camera capture triggers simultaneously for host and guest, capturing high-speed burst frames and rendering both video feeds side-by-side for every pose.
 - 🖼️ **Multiple Photobooth Layouts**:
   - **2x6 Photo Strips**: 3-pose & 4-pose layouts with customizable title and date footers.
   - **6x4 4R Landscape & Portrait Prints**: 1-pose, 2-pose, 3-pose, and 4-pose layouts.
@@ -26,9 +26,10 @@
 - 🐱 **Interactive Multiplayer Decorate Stage**:
   - Add cute stamps/stickers (🐱, 🐰, 🎀, ✨, 💖, 👑, 🌸, 🧸, etc.).
   - Drag stickers live across the canvas—edits sync across both participants' screens in real-time via WebRTC data channels.
-- 💾 **Instant Download & Google Drive Export**:
-  - Download high-resolution JPEG prints directly to your device.
-  - Optional 1-click upload to Google Drive via Google OAuth2 integration.
+- 💾 **Instant Download, Animated GIFs & Google Drive Export**:
+  - Download high-resolution JPEG prints and animated GIFs of your burst captures directly to your device.
+  - Optional 1-click upload of photos and GIFs to Google Drive via Google OAuth2 integration.
+- 📱 **Progressive Web App (PWA) Support**: Install the app directly to your home screen on mobile or desktop for a native-like experience.
 
 ---
 

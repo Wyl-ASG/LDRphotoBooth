@@ -367,6 +367,7 @@ export const compileLayoutCanvas = async ({
   customDate = 'DD/MM/YY',
   cameraFilter = 'none',
   backgroundColor = '#111111',
+  returnType = 'dataUrl',
 }) => {
   if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
     try {
@@ -381,7 +382,7 @@ export const compileLayoutCanvas = async ({
   canvas.width = layout.canvasWidth;
   canvas.height = layout.canvasHeight;
 
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const cw = canvas.width;
   const ch = canvas.height;
 
@@ -439,6 +440,10 @@ export const compileLayoutCanvas = async ({
     layout.footers.forEach((footer) => {
       drawTextSectionToCanvas(ctx, footer, cw, ch, customTitle, customDate);
     });
+  }
+
+  if (returnType === 'imageData') {
+    return ctx.getImageData(0, 0, cw, ch);
   }
 
   return canvas.toDataURL('image/jpeg', 0.88);

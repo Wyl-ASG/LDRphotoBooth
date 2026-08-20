@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, Users, Save, Loader2, Sparkles, Copy, Heart, RefreshCcw, XCircle, Star, X } from 'lucide-react';
+import { Camera, Users, Save, Loader2, Sparkles, Copy, Heart, RefreshCcw, XCircle, Star, X, Download } from 'lucide-react';
 
 import { Button } from './components/Button';
 import { BoothCamera } from './components/BoothCamera';
@@ -19,6 +19,7 @@ export default function App() {
     currentPoseIndex,
     totalPoses,
     capturedPoses,
+    capturedBurstFrames,
     flash,
     layoutStyle,
     cameraFilter,
@@ -54,6 +55,27 @@ export default function App() {
     handleBackToBooth,
     saveToGoogleDrive,
   } = useBoothController();
+
+  const [installPrompt, setInstallPrompt] = React.useState(null);
+
+  React.useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setInstallPrompt(null);
+    }
+  };
 
   return (
     <div className="min-h-screen relative flex flex-col items-center justify-center p-4 overflow-hidden">
@@ -123,6 +145,9 @@ export default function App() {
                   Host + Google Drive <span className="text-xs opacity-75 font-normal ml-1">(Testing)</span>
                 </Button>
                 <Button icon={Users} variant="secondary" onClick={handleOpenRoleSelect}>Join Friend</Button>
+                {installPrompt && (
+                  <Button icon={Download} variant="secondary" onClick={handleInstallClick}>Install App</Button>
+                )}
               </div>
             </div>
           )}
@@ -214,6 +239,12 @@ export default function App() {
               uploadSuccess={uploadSuccess}
               onBackToBooth={handleBackToBooth}
               onSaveToDrive={saveToGoogleDrive}
+              capturedPoses={capturedBurstFrames}
+              cameraFilter={cameraFilter}
+              layoutStyle={layoutStyle}
+              customTitle={customTitle}
+              customDate={customDate}
+              totalPoses={totalPoses}
             />
           )}
         </div>

@@ -17,6 +17,7 @@ export const useBoothController = () => {
   const [currentPoseIndex, setCurrentPoseIndex] = useState(0);
   const [totalPoses, setTotalPoses] = useState(1);
   const [capturedPoses, setCapturedPoses] = useState([]);
+  const [capturedBurstFrames, setCapturedBurstFrames] = useState([]);
   const [flash, setFlash] = useState(false);
   const [layoutStyle, setLayoutStyle] = useState(BOOTH_PROTOCOL.defaults.layoutStyle);
   const [cameraFilter, setCameraFilter] = useState(BOOTH_PROTOCOL.defaults.cameraFilter);
@@ -41,6 +42,7 @@ export const useBoothController = () => {
     setIsTakingPhotos(false);
     setCountdown(null);
     setCapturedPoses([]);
+    setCapturedBurstFrames([]);
     setCurrentPoseIndex(0);
     setIsUploading(false);
     setUploadSuccess(false);
@@ -86,7 +88,9 @@ export const useBoothController = () => {
 
     if (normalizedData.type === BOOTH_PROTOCOL.messageTypes.countdownTick) {
       setIsTakingPhotos(true);
-      setCountdown(normalizedData.count);
+      if (normalizedData.count !== 'burst') {
+        setCountdown(normalizedData.count);
+      }
       setCurrentPoseIndex(normalizedData.poseIndex || 0);
       setTotalPoses(normalizedData.totalPoses || 1);
       if (normalizedData.count === 0) {
@@ -97,6 +101,14 @@ export const useBoothController = () => {
           next[normalizedData.poseIndex || 0] = posePair;
           return next;
         });
+        setCapturedBurstFrames((prev) => {
+          const next = [...prev];
+          for(let i=0; i<3; i++) next.push(posePair);
+          return next;
+        });
+      } else if (normalizedData.count === 'burst') {
+        const posePair = captureSinglePosePair(normalizedData.poseIndex || 0);
+        setCapturedBurstFrames((prev) => [...prev, posePair]);
       }
     } else if (normalizedData.type === BOOTH_PROTOCOL.messageTypes.photoTaken) {
       triggerFlash();
@@ -191,6 +203,7 @@ export const useBoothController = () => {
     setIsTakingPhotos(false);
     setCountdown(null);
     setCapturedPoses([]);
+    setCapturedBurstFrames([]);
     setCurrentPoseIndex(0);
     setIsUploading(false);
     setUploadSuccess(false);
@@ -257,8 +270,10 @@ export const useBoothController = () => {
       const activeLayout = getLayoutById(latestStateRef.current.layoutStyle);
       const posesNeeded = activeLayout.poses;
       const accumulatedPoses = [];
+      const accumulatedBursts = [];
 
       setCapturedPoses([]);
+      setCapturedBurstFrames([]);
 
       for (let p = 0; p < posesNeeded; p++) {
         setCurrentPoseIndex(p);
@@ -273,7 +288,14 @@ export const useBoothController = () => {
             poseIndex: p,
             totalPoses: posesNeeded,
           });
-          await new Promise((res) => setTimeout(res, 1000));
+          
+          // Capture burst frames during all 3 seconds
+          for(let f = 0; f < 8; f++) {
+            sendData({ type: BOOTH_PROTOCOL.messageTypes.countdownTick, count: 'burst', poseIndex: p, totalPoses: posesNeeded });
+            accumulatedBursts.push(captureSinglePosePair(p));
+            setCapturedBurstFrames([...accumulatedBursts]);
+            await new Promise((res) => setTimeout(res, 125));
+          }
         }
 
         setCountdown(0);
@@ -290,6 +312,12 @@ export const useBoothController = () => {
         const posePair = captureSinglePosePair(p);
         accumulatedPoses.push(posePair);
         setCapturedPoses([...accumulatedPoses]);
+        
+        // Also add the final clear flash photo to the burst!
+        for(let i=0; i<3; i++) {
+            accumulatedBursts.push(posePair);
+        }
+        setCapturedBurstFrames([...accumulatedBursts]);
 
         setCountdown(null);
         sendData({
@@ -364,7 +392,7 @@ export const useBoothController = () => {
   );
 
   const uploadToDriveWithToken = useCallback(
-    async (token) => {
+    async (token, gifBlobUrl = null) => {
       if (!token || photos.length === 0) return;
       setIsUploading(true);
       setUploadSuccess(false);
@@ -383,6 +411,23 @@ export const useBoothController = () => {
         });
 
         if (!res.ok) throw new Error('Upload failed');
+        
+        if (gifBlobUrl) {
+          const gifBlobRes = await fetch(gifBlobUrl);
+          const gifBlob = await gifBlobRes.blob();
+          const gifMetadata = { name: `Purikura_Animated_${Date.now()}.gif`, mimeType: 'image/gif' };
+          const gifForm = new FormData();
+          gifForm.append('metadata', new Blob([JSON.stringify(gifMetadata)], { type: 'application/json' }));
+          gifForm.append('file', gifBlob);
+          
+          const gifRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: gifForm,
+          });
+          if (!gifRes.ok) throw new Error('GIF Upload failed');
+        }
+
         setUploadSuccess(true);
         setTimeout(() => setUploadSuccess(false), 3000);
       } catch (error) {
@@ -394,14 +439,14 @@ export const useBoothController = () => {
     [photos]
   );
 
-  const saveToGoogleDrive = useCallback(async () => {
+  const saveToGoogleDrive = useCallback(async (gifBlobUrl = null) => {
     if (photos.length === 0) return;
     if (googleToken) {
-      await uploadToDriveWithToken(googleToken);
+      await uploadToDriveWithToken(googleToken, gifBlobUrl);
     } else {
       handleGoogleLogin(async (newToken) => {
         if (newToken) {
-          await uploadToDriveWithToken(newToken);
+          await uploadToDriveWithToken(newToken, gifBlobUrl);
         }
       });
     }
@@ -429,6 +474,7 @@ export const useBoothController = () => {
     currentPoseIndex,
     totalPoses,
     capturedPoses,
+    capturedBurstFrames,
     flash,
     layoutStyle,
     setLayoutStyle,

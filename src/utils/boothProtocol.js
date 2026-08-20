@@ -104,7 +104,7 @@ export const normalizePeerMessage = (data) => {
 
   switch (data.type) {
     case messageTypes.countdownTick:
-      if (data.count === null || (Number.isInteger(data.count) && data.count >= 0 && data.count <= 9)) {
+      if (data.count === null || data.count === 'burst' || (Number.isInteger(data.count) && data.count >= 0 && data.count <= 9)) {
         return {
           type: data.type,
           count: data.count,

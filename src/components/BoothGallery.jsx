@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Image as ImageIcon, Save, Loader2, RefreshCcw, CheckCircle2, Download } from 'lucide-react';
+import { Image as ImageIcon, Save, Loader2, RefreshCcw, CheckCircle2, Download, Film } from 'lucide-react';
 import { Button } from './Button';
+import { createGifFromPoses } from '../utils/gifExport';
 
 export const BoothGallery = ({ 
   photos, 
@@ -8,10 +9,18 @@ export const BoothGallery = ({
   isUploading, 
   uploadSuccess, 
   onBackToBooth, 
-  onSaveToDrive 
+  onSaveToDrive,
+  capturedPoses,
+  cameraFilter,
+  layoutStyle,
+  customTitle,
+  customDate,
+  totalPoses
 }) => {
   const latestPhoto = photos.length > 0 ? photos[photos.length - 1] : null;
   const [aspectRatio, setAspectRatio] = useState(null);
+  const [isGeneratingGif, setIsGeneratingGif] = useState(false);
+  const [generatedGifUrl, setGeneratedGifUrl] = useState(null);
 
   useEffect(() => {
     if (!latestPhoto) return;
@@ -32,6 +41,62 @@ export const BoothGallery = ({
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+
+  const handleDownloadGif = async () => {
+    if (!capturedPoses || capturedPoses.length === 0) return;
+    try {
+      setIsGeneratingGif(true);
+      
+      let finalGifUrl = generatedGifUrl;
+      if (!finalGifUrl) {
+        finalGifUrl = await createGifFromPoses({
+          burstFrames: capturedPoses,
+          cameraFilter,
+          layoutId: layoutStyle,
+          customTitle,
+          customDate,
+          totalPoses
+        });
+        setGeneratedGifUrl(finalGifUrl);
+      }
+      
+      const a = document.createElement('a');
+      a.href = finalGifUrl;
+      a.download = `Purikura_Animated_${Date.now()}.gif`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Failed to generate GIF:', err);
+      alert('Failed to generate GIF. Please try again.');
+    } finally {
+      setIsGeneratingGif(false);
+    }
+  };
+
+  const handleSaveToDrive = async () => {
+    try {
+      let finalGifUrl = generatedGifUrl;
+      if (!finalGifUrl && capturedPoses && capturedPoses.length > 0) {
+        setIsGeneratingGif(true);
+        finalGifUrl = await createGifFromPoses({
+          burstFrames: capturedPoses,
+          cameraFilter,
+          layoutId: layoutStyle,
+          customTitle,
+          customDate,
+          totalPoses
+        });
+        setGeneratedGifUrl(finalGifUrl);
+        setIsGeneratingGif(false);
+      }
+      onSaveToDrive(finalGifUrl);
+    } catch (err) {
+      console.error('Failed to generate GIF before saving:', err);
+      onSaveToDrive(null);
+      setIsGeneratingGif(false);
+    }
   };
 
   const maxWidthClass = aspectRatio
@@ -69,6 +134,18 @@ export const BoothGallery = ({
           </Button>
         )}
 
+        {capturedPoses && capturedPoses.length > 0 && (
+          <Button 
+            icon={isGeneratingGif ? Loader2 : Film} 
+            onClick={handleDownloadGif}
+            disabled={isGeneratingGif}
+            variant="secondary"
+            className={isGeneratingGif ? '[&>svg]:animate-spin' : ''}
+          >
+            {isGeneratingGif ? 'Generating...' : 'Download GIF'}
+          </Button>
+        )}
+
         {role === 'host' && (
           <Button icon={RefreshCcw} variant="secondary" onClick={onBackToBooth}>
             Back to Booth
@@ -78,7 +155,7 @@ export const BoothGallery = ({
         {role === 'host' && (
           <Button 
             icon={isUploading ? Loader2 : uploadSuccess ? CheckCircle2 : Save} 
-            onClick={onSaveToDrive}
+            onClick={handleSaveToDrive}
             disabled={isUploading || uploadSuccess || !latestPhoto}
             className={isUploading ? '[&>svg]:animate-spin' : ''}
           >
